@@ -54,10 +54,6 @@ class Finding:
     """Sink line marked ``>>>`` plus ±context lines.  Populated by
     :mod:`triage.stages.result_enricher`."""
 
-    # --- scored by result_scorer ---
-    score: int = 0
-    """Priority score.  Populated by :mod:`triage.stages.result_scorer`."""
-
     # --- optional extra data ---
     stack_dumps: list[dict[str, Any]] | None = field(default=None, repr=False)
     """Normalized data-flow paths produced by the scanner, or ``None``.
@@ -92,7 +88,6 @@ class Finding:
             "scan_engine": self.scan_engine,
             "display_text": self.display_text,
             "source_excerpt": self.source_excerpt,
-            "score": self.score,
         }
         if self.stack_dumps is not None:
             d["stack_dumps"] = self.stack_dumps

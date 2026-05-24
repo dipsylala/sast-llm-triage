@@ -16,15 +16,14 @@ from triage.scanners import veracode as veracode_scanner
 from triage.stages.normalizer import normalize
 from triage.stages.repo_cloner import _is_url, clone
 from triage.stages.result_enricher import enrich
-from triage.stages.result_scorer import score
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sast-llm-triage",
         description=(
-            "Scan a Git repository with Veracode, Semgrep, or Snyk, enrich and "
-            "score the findings, and write triage_findings.json for LLM triage."
+            "Scan a Git repository with Veracode, Semgrep, or Snyk, enrich the "
+            "findings, and write triage_findings.json for LLM triage."
         ),
     )
     parser.add_argument(
@@ -141,16 +140,11 @@ def main() -> None:
     print(f"\n[enrich] Reading source context (±{cfg.context_lines} lines) ...")
     enrich(result.findings, local_path, cfg.context_lines)
 
-    # --- Step 4: Score findings ---
-    print("[score] Scoring findings ...")
-    score(result.findings)
-
-    # --- Step 5: Normalise and write output files ---
+    # --- Step 4: Normalise and write output files ---
     print("[normalise] Writing output files ...")
     combined_path = normalize(
         result,
         cfg.qualifying_cwes,
-        cfg.max_findings,
         sast_dir,
         repo_url=repo_url,
     )
@@ -163,7 +157,7 @@ def main() -> None:
         repo_name=repo_name,
         output_dir=cfg.output_dir / repo_name,
         combined_path=combined_path,
-        qualifying_count=min(qualifying_count, cfg.max_findings) if cfg.max_findings else qualifying_count,
+        qualifying_count=qualifying_count,
         total_raw=result.total_raw,
     )
 

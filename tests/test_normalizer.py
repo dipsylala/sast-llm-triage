@@ -25,7 +25,7 @@ class TestNormalizeFiltering:
             make_finding(cwe_id="999", severity=5, issue_id="2"),  # NOT qualifying
         ]
         result = _make_result(findings)
-        combined_path = normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
+        combined_path = normalize(result, QUALIFYING, sast_dir=tmp_path)
         data = json.loads(combined_path.read_text())
         assert data["total_qualifying"] == 1
         assert len(data["findings"]) == 1
@@ -34,7 +34,7 @@ class TestNormalizeFiltering:
     def test_qualifying_findings_all_included(self, tmp_path: Path):
         findings = [make_finding(cwe_id="89", issue_id=str(i)) for i in range(5)]
         result = _make_result(findings)
-        combined_path = normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
+        combined_path = normalize(result, QUALIFYING, sast_dir=tmp_path)
         data = json.loads(combined_path.read_text())
         assert len(data["findings"]) == 5
 
@@ -47,7 +47,7 @@ class TestNormalizeSortOrder:
             make_finding(cwe_id="89", severity=3, issue_id="med"),
         ]
         result = _make_result(findings)
-        combined_path = normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
+        combined_path = normalize(result, QUALIFYING, sast_dir=tmp_path)
         data = json.loads(combined_path.read_text())
         severities = [f["severity"] for f in data["findings"]]
         assert severities == sorted(severities, reverse=True)
@@ -59,56 +59,22 @@ class TestNormalizeSortOrder:
             make_finding(cwe_id="79", severity=4, issue_id="xss"),
         ]
         result = _make_result(findings)
-        combined_path = normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
+        combined_path = normalize(result, QUALIFYING, sast_dir=tmp_path)
         data = json.loads(combined_path.read_text())
         cwes = [int(f["cwe_id"]) for f in data["findings"]]
         assert cwes == sorted(cwes)
 
 
-class TestNormalizeCap:
-    def test_cap_truncates_findings(self, tmp_path: Path):
-        findings = [
-            make_finding(cwe_id="89", severity=4, issue_id=str(i))
-            for i in range(10)
-        ]
-        result = _make_result(findings)
-        combined_path = normalize(result, QUALIFYING, max_findings=3, sast_dir=tmp_path)
-        data = json.loads(combined_path.read_text())
-        assert len(data["findings"]) == 3
-        assert data["capped"] is True
-        assert data["assessed_count"] == 3
-
-    def test_cap_note_on_first_entry(self, tmp_path: Path):
-        findings = [
-            make_finding(cwe_id="89", severity=4, issue_id=str(i))
-            for i in range(10)
-        ]
-        result = _make_result(findings)
-        combined_path = normalize(result, QUALIFYING, max_findings=3, sast_dir=tmp_path)
-        data = json.loads(combined_path.read_text())
-        first = data["findings"][0]
-        assert "reasoning_note" in first
-        assert "Capped" in first["reasoning_note"]
-
-    def test_no_cap_when_under_limit(self, tmp_path: Path):
-        findings = [make_finding(cwe_id="89", issue_id=str(i)) for i in range(3)]
-        result = _make_result(findings)
-        combined_path = normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
-        data = json.loads(combined_path.read_text())
-        assert data["capped"] is False
-        assert "reasoning_note" not in data["findings"][0]
-
-
 class TestNormalizeOutput:
     def test_triage_findings_written(self, tmp_path: Path):
         result = _make_result([make_finding(cwe_id="89")])
-        combined_path = normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
+        combined_path = normalize(result, QUALIFYING, sast_dir=tmp_path)
         assert combined_path.exists()
         assert combined_path.name == "triage_findings.json"
 
     def test_raw_findings_written(self, tmp_path: Path):
         result = _make_result([make_finding(cwe_id="89")])
-        normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
+        normalize(result, QUALIFYING, sast_dir=tmp_path)
         raw_path = tmp_path / "raw_findings.json"
         assert raw_path.exists()
         data = json.loads(raw_path.read_text())
@@ -119,20 +85,18 @@ class TestNormalizeOutput:
         result = _make_result(findings, repo_name="test-repo")
         result.repo_url = "https://github.com/owner/test-repo"
         combined_path = normalize(
-            result, QUALIFYING, max_findings=60, sast_dir=tmp_path, repo_url=result.repo_url
+            result, QUALIFYING, sast_dir=tmp_path, repo_url=result.repo_url
         )
         data = json.loads(combined_path.read_text())
         assert data["repo"] == "test-repo"
         assert data["repo_url"] == "https://github.com/owner/test-repo"
         assert data["scan_engine"] == "semgrep"
         assert "total_qualifying" in data
-        assert "assessed_count" in data
-        assert "capped" in data
         assert isinstance(data["findings"], list)
 
     def test_empty_findings_writes_empty_list(self, tmp_path: Path):
         result = _make_result([])
-        combined_path = normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
+        combined_path = normalize(result, QUALIFYING, sast_dir=tmp_path)
         data = json.loads(combined_path.read_text())
         assert data["findings"] == []
         assert data["total_qualifying"] == 0
@@ -140,5 +104,5 @@ class TestNormalizeOutput:
     def test_sast_dir_created_if_not_exists(self, tmp_path: Path):
         sast_dir = tmp_path / "new" / ".sast-results"
         result = _make_result([])
-        normalize(result, QUALIFYING, max_findings=60, sast_dir=sast_dir)
+        normalize(result, QUALIFYING, sast_dir=sast_dir)
         assert sast_dir.is_dir()

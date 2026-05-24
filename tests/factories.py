@@ -39,7 +39,6 @@ def make_finding(**overrides) -> Finding:
         scan_engine="semgrep",
         display_text="SQL injection sink",
         source_excerpt="",
-        score=0,
         stack_dumps=None,
     )
     defaults.update(overrides)

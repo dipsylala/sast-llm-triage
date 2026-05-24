@@ -1,6 +1,6 @@
 """Integration tests — full pipeline from scan through triage_findings.json.
 
-Each test exercises all four stages (scan → enrich → score → normalize)
+Each test exercises all stages (scan → enrich → normalize)
 against a real temporary repository directory.  Only the external CLI call
 is mocked; the enricher actually reads source files from disk so
 source_excerpt is populated from real content.
@@ -17,11 +17,9 @@ from triage.scanners import semgrep as semgrep_scanner
 from triage.scanners import snyk as snyk_scanner
 from triage.scanners import veracode as veracode_scanner
 from triage.stages.result_enricher import enrich
-from triage.stages.result_scorer import score
 from triage.stages.normalizer import normalize
 
 _QUALIFYING_CWES: frozenset[str] = frozenset({"89", "78"})
-_MAX_FINDINGS = 60
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +72,7 @@ _SEMGREP_OUTPUT = json.dumps({
 
 
 class TestSemgrepPipeline:
-    """Full pipeline: semgrep scan → enrich → score → normalize."""
+    """Full pipeline: semgrep scan → enrich → normalize."""
 
     def test_triage_findings_written(self, mini_repo: Path, tmp_path: Path):
         cfg = SemgrepConfig(config="auto", pro=False)
@@ -87,11 +85,10 @@ class TestSemgrepPipeline:
             result = semgrep_scanner.scan(mini_repo, cfg)
 
         enrich(result.findings, mini_repo, 8)
-        score(result.findings)
-        combined_path = normalize(result, _QUALIFYING_CWES, _MAX_FINDINGS, sast_dir)
+        out_path = normalize(result, _QUALIFYING_CWES, sast_dir)
 
-        assert combined_path.exists()
-        payload = json.loads(combined_path.read_text(encoding="utf-8"))
+        assert out_path.exists()
+        payload = json.loads(out_path.read_text(encoding="utf-8"))
         assert payload["scan_engine"] == "semgrep"
         assert payload["total_qualifying"] == 1
         assert len(payload["findings"]) == 1
@@ -132,27 +129,7 @@ class TestSemgrepPipeline:
         assert p["sink"]["snippet"] == "cursor.execute(query)"
         assert p["sink"]["line"] == 9
 
-    def test_finding_scored(self, mini_repo: Path, tmp_path: Path):
-        """CWE-89 base 7; sink file app/db.py has no path boost → score == 7."""
-        cfg = SemgrepConfig(config="auto", pro=False)
-
-        with patch(
-            "triage.scanners.semgrep.capture_cmd",
-            return_value=(True, _SEMGREP_OUTPUT, ""),
-        ):
-            result = semgrep_scanner.scan(mini_repo, cfg)
-
-        score(result.findings)
-        assert result.findings[0].score == 7
-
-
-# ---------------------------------------------------------------------------
-# Veracode integration test
-# ---------------------------------------------------------------------------
-
-
-def _veracode_filtered_json() -> dict:
-    """A filtered_*.json payload with two independent taint paths to the sink."""
+    def test_dataflow_trace_populated(self, mini_repo: Path, tmp_path: Path):
     return {
         "findings": [{
             "issue_id": "2001",
@@ -188,10 +165,10 @@ def _veracode_filtered_json() -> dict:
 
 
 class TestVeracodePipeline:
-    """Full pipeline: veracode scan (mocked CLI) → enrich → score → normalize."""
+    """Full pipeline: veracode scan (mocked CLI) → enrich → normalize."""
 
     def _run_pipeline(self, mini_repo: Path, tmp_path: Path) -> tuple[dict, list]:
-        """Run all four pipeline stages and return (payload, findings list)."""
+        """Run all pipeline stages and return (payload, findings list)."""
         cfg = VeracodeConfig(package_dir_name=".veracode", scan_workers=1)
         sast_dir = tmp_path / ".sast-results"
         pkg_dir = sast_dir / cfg.package_dir_name
@@ -208,10 +185,9 @@ class TestVeracodePipeline:
             result = veracode_scanner.scan(mini_repo, sast_dir, cfg)
 
         enrich(result.findings, mini_repo, 8)
-        score(result.findings)
-        combined_path = normalize(result, _QUALIFYING_CWES, _MAX_FINDINGS, sast_dir)
+        out_path = normalize(result, _QUALIFYING_CWES, sast_dir)
 
-        payload = json.loads(combined_path.read_text(encoding="utf-8"))
+        payload = json.loads(out_path.read_text(encoding="utf-8"))
         return payload, payload["findings"]
 
     def test_triage_findings_written(self, mini_repo: Path, tmp_path: Path):
@@ -245,11 +221,6 @@ class TestVeracodePipeline:
         # The two paths differ in source line (entry point).
         source_lines = {p["source"]["line"] for p in stack_dumps}
         assert source_lines == {4, 5}
-
-    def test_finding_scored(self, mini_repo: Path, tmp_path: Path):
-        """CWE-89 base 7; app/db.py has no path boost → score == 7."""
-        _, findings = self._run_pipeline(mini_repo, tmp_path)
-        assert findings[0]["score"] == 7
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +299,7 @@ _SNYK_PIPELINE_SARIF: dict = {
 
 
 class TestSnykPipeline:
-    """Full scan → enrich → score → normalize pipeline for Snyk Code."""
+    """Full scan → enrich → normalize pipeline for Snyk Code."""
 
     def _cfg(self) -> SnykConfig:
         return SnykConfig()
@@ -347,9 +318,8 @@ class TestSnykPipeline:
             scan_result = snyk_scanner.scan(mini_repo, self._cfg())
 
         enrich(scan_result.findings, mini_repo)
-        score(scan_result.findings)
         out_dir = tmp_path / "output"
-        out_path = normalize(scan_result, _QUALIFYING_CWES, _MAX_FINDINGS, out_dir)
+        out_path = normalize(scan_result, _QUALIFYING_CWES, out_dir)
         findings = json.loads(out_path.read_text())["findings"]
         return out_path, findings
 
@@ -367,8 +337,3 @@ class TestSnykPipeline:
         """Enricher should populate source_excerpt from app/db.py line 9."""
         _, findings = self._run_pipeline(mini_repo, tmp_path)
         assert "cursor.execute" in findings[0]["source_excerpt"]
-
-    def test_finding_scored(self, mini_repo: Path, tmp_path: Path):
-        """CWE-89 base 7; app/db.py has no path boost → score == 7."""
-        _, findings = self._run_pipeline(mini_repo, tmp_path)
-        assert findings[0]["score"] == 7

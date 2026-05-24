@@ -3,7 +3,7 @@
 ## 1. Overview
 
 This document specifies a command-line tool (`sast-llm-triage`) that takes a single
-Git repository, runs a static analysis scan against it, enriches and scores the
+Git repository, runs a static analysis scan against it, enriches the
 findings, and writes a structured `triage_findings.json` file ready for
 LLM-assisted exploitability triage.
 
@@ -18,10 +18,9 @@ discovery pipeline.
 1. Accept a single repository (URL or local path) as input.
 2. Run a SAST scan using **Veracode Pipeline Scan**, **Semgrep**, or **Snyk Code**.
 3. Enrich each finding with surrounding source-code context.
-4. Score findings by vulnerability type and file location.
-5. Produce a normalised `triage_findings.json` capped at 60 findings, ready
+4. Produce a normalised `triage_findings.json` ready
    for the LLM triage agent (`agents/scan-repo.md`).
-6. Print clear post-run instructions so the user can invoke the triage agent in
+5. Print clear post-run instructions so the user can invoke the triage agent in
    their IDE.
 
 ---
@@ -51,8 +50,7 @@ CLI input (--repo URL | local-path, --scanner veracode|semgrep|snyk)
            ↓
      result_enricher    →  Finding.source_excerpt populated (±8 lines)
            ↓
-     result_scorer      →  Finding.score populated (CWE base + path boost)
-           ↓
+
      normalizer         →  triage_findings.json written to disk
            ↓
    [Manual step]
@@ -135,7 +133,6 @@ sast-llm-triage --repo <url-or-local-path> \
 | `scan_engine` | `str` | `"veracode"`, `"semgrep"`, or `"snyk"` |
 | `display_text` | `str` | Tool description of the flaw class |
 | `source_excerpt` | `str` | Sink line marked `>>>` plus ±8 context lines (set by enricher) |
-| `score` | `int` | Priority score (set by scorer) |
 | `stack_dumps` | `dict \| None` | Normalised data-flow paths (source → sink) from Veracode, Semgrep, or Snyk when present |
 
 ### 7.2 ScanResult
@@ -222,41 +219,11 @@ For each `Finding` with a non-empty `file` field:
 Findings whose file does not exist or cannot be read receive
 `"[source file not found]"` as `source_excerpt`.
 
-### 8.4 result_scorer
-
-Scores each `Finding` in place:
-
-```text
-score = cwe_base_score + path_boost
-```
-
-**CWE base scores:**
-
-| CWE(s) | Score | Category |
-| -------- | ------- | ---------- |
-| 77, 78 | 10 | Command injection |
-| 120, 121, 787 | 10 | Buffer overflow |
-| 415, 416 | 9 | Double free / use-after-free |
-| 502 | 9 | Unsafe deserialization |
-| 134 | 8 | Format string |
-| 22, 73, 98 | 8 | Path traversal / file inclusion |
-| 190, 191 | 7 | Integer overflow / underflow |
-| 89 | 7 | SQL injection |
-| 918 | 6 | SSRF |
-| 79, 80 | 3 | XSS |
-| (default) | 2 | Any other qualifying CWE |
-
-**Path boosts (+3 each):**
-
-- file path contains `controllers/`
-- file path contains `routes/`
-
-### 8.5 normalizer
+### 8.4 normalizer
 
 1. Filters findings to the configured qualifying CWE set.
 2. Sorts: severity descending, `int(cwe_id)` ascending, `issue_id` ascending.
-3. Caps at `max_findings` (default 60); sets `capped: true` when truncated.
-4. Writes `<sast_dir>/triage_findings.json` with structure:
+3. Writes `<sast_dir>/triage_findings.json` with structure:
 
     ```json
     {
@@ -264,13 +231,11 @@ score = cwe_base_score + path_boost
       "repo_url": "<url-or-null>",
       "scan_engine": "veracode|semgrep|snyk",
       "total_qualifying": 42,
-      "assessed_count": 42,
-      "capped": false,
       "findings": [ ... ]
     }
     ```
 
-5. Also writes `<sast_dir>/raw_findings.json` with all pre-filter findings.
+4. Also writes `<sast_dir>/raw_findings.json` with all pre-filter findings.
 
 ---
 
@@ -284,7 +249,7 @@ score = cwe_base_score + path_boost
       .semgrep/              ← raw Semgrep JSON output (semgrep only)
       .snyk/                 ← raw Snyk SARIF JSON output (snyk only)
       raw_findings.json      ← all findings before CWE filter
-      triage_findings.json  ← filtered, scored, enriched (LLM agent input)
+      triage_findings.json  ← filtered, enriched (LLM agent input)
     triage_report.json       ← written by LLM agent after manual triage
 ```
 
@@ -300,7 +265,6 @@ output:
 
 scan:
   context_lines: 8       # source lines of context around each finding
-  max_findings: 60       # cap for triage_findings.json
   qualifying_cwes:       # CWE IDs to include (string values)
     - "22"
     - "73"

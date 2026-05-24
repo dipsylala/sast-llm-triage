@@ -4,7 +4,7 @@ Filters findings to the qualifying CWE set, sorts, and writes two output files:
 
 - ``<sast_dir>/raw_findings.json``     — all pre-filter findings
 - ``<sast_dir>/triage_findings.json`` — filtered, sorted, ready for
-  the LLM triage agent (optionally capped via ``max_findings`` config)
+  the LLM triage agent
 """
 
 from __future__ import annotations
@@ -16,10 +16,6 @@ from pathlib import Path
 from triage.models import Finding, ScanResult
 
 logger = logging.getLogger(__name__)
-
-_CAP_NOTE_TEMPLATE = (
-    "NOTE: Capped at {max} of {total} total findings due to volume."
-)
 
 
 def _sort_key(f: Finding) -> tuple[int, int, str]:
@@ -34,16 +30,14 @@ def _sort_key(f: Finding) -> tuple[int, int, str]:
 def normalize(
     result: ScanResult,
     qualifying_cwes: frozenset[str],
-    max_findings: int,
     sast_dir: Path,
     repo_url: str | None = None,
 ) -> Path:
-    """Filter, sort, cap, enrich, and write ``triage_findings.json``.
+    """Filter, sort, and write ``triage_findings.json``.
 
     Args:
-        result: The enriched and scored :class:`ScanResult`.
+        result: The enriched :class:`ScanResult`.
         qualifying_cwes: Set of CWE ID strings to include.
-        max_findings: Maximum number of findings in ``triage_findings.json``.
         sast_dir: Directory where output files are written
             (``<output_dir>/<repo_name>/.sast-results``).
         repo_url: Original remote URL, if known.
@@ -68,18 +62,10 @@ def normalize(
     # --- Sort ---
     qualifying.sort(key=_sort_key)
 
-    # --- Cap (max_findings == 0 means no cap) ---
-    capped = bool(max_findings) and total_qualifying > max_findings
-    to_write = qualifying[:max_findings] if max_findings else qualifying
-
     # --- Build combined findings dicts ---
     combined: list[dict] = []  # type: ignore[type-arg]
-    for i, finding in enumerate(to_write):
+    for finding in qualifying:
         d = finding.to_dict()
-        if capped and i == 0:
-            d["reasoning_note"] = _CAP_NOTE_TEMPLATE.format(
-                max=max_findings, total=total_qualifying
-            )
         combined.append(d)
 
     # --- Write triage_findings.json ---
@@ -88,8 +74,6 @@ def normalize(
         "repo_url": repo_url,
         "scan_engine": result.scan_engine,
         "total_qualifying": total_qualifying,
-        "assessed_count": len(combined),
-        "capped": capped,
         "findings": combined,
     }
 
@@ -100,10 +84,8 @@ def normalize(
     )
 
     logger.info(
-        "triage_findings written: %d/%d qualifying finding(s)%s → %s",
-        len(combined),
+        "triage_findings written: %d qualifying finding(s) → %s",
         total_qualifying,
-        " (capped)" if capped else "",
         combined_out,
     )
 

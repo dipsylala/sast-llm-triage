@@ -15,7 +15,7 @@ unusually difficult conditions, or a false positive.  Write the results to
 `<output_dir>/<repo_name>/.sast-results/triage_findings.json` exists.
 
 - **If it exists**: Use this file as your sole findings input.  It already
-  contains the filtered, sorted, capped findings with source excerpts attached.
+  contains the filtered, sorted findings with source excerpts attached.
   Skip directly to the [Assessment process](#assessment-process).
   The source-file read rule defined there governs all repository source-file
   reads during analysis; it does not prevent reading source files, it only
@@ -99,7 +99,6 @@ display_text    — tool description of the flaw class
 file            — repo-relative path to the sink
 line            — line number of the sink
 source_excerpt  — sink line marked >>> plus ±8 lines of context
-score           — priority score assigned by sast-llm-triage
 stack_dumps     — list of normalized data-flow paths (present only when the
                   scanner resolved at least one source → sink path; Semgrep
                   only emits this for taint-mode rules — pattern rules omit
@@ -127,12 +126,9 @@ The file contains:
 
 - `findings` — the qualifying findings already filtered and sorted by
   severity desc / CWE asc.
-- `total_qualifying` / `capped` — if `capped` is `true` (only when
-  `max_findings` is explicitly configured), include
-  `"NOTE: Capped at <max> of <total_qualifying> total findings due to volume."`
-  in the first entry's `reasoning`.
+- `total_qualifying` — total number of qualifying findings.
 - Per finding: `issue_id`, `scan_file`, `scan_engine`, `cwe_id`, `issue_type`,
-  `severity`, `file`, `line`, `source_excerpt`, `score`, and optionally
+  `severity`, `file`, `line`, `source_excerpt`, and optionally
 - `source_excerpt` — the sink line marked with `>>>` plus ±8 lines of context.
   **This is your primary sink read.**  When copying this field to the output
   report, trim it to the 4 lines nearest the flagged line.
