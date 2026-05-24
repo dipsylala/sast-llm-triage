@@ -4,7 +4,7 @@
 
 This document specifies a command-line tool (`sast-llm-triage`) that takes a single
 Git repository, runs a static analysis scan against it, enriches and scores the
-findings, and writes a structured `combined_results.json` file ready for
+findings, and writes a structured `triage_findings.json` file ready for
 LLM-assisted exploitability triage.
 
 The tool is designed to support security researchers and developers who want a
@@ -19,7 +19,7 @@ discovery pipeline.
 2. Run a SAST scan using **Veracode Pipeline Scan**, **Semgrep**, or **Snyk Code**.
 3. Enrich each finding with surrounding source-code context.
 4. Score findings by vulnerability type and file location.
-5. Produce a normalised `combined_results.json` capped at 60 findings, ready
+5. Produce a normalised `triage_findings.json` capped at 60 findings, ready
    for the LLM triage agent (`agents/scan-repo.md`).
 6. Print clear post-run instructions so the user can invoke the triage agent in
    their IDE.
@@ -53,11 +53,11 @@ CLI input (--repo URL | local-path, --scanner veracode|semgrep|snyk)
            ↓
      result_scorer      →  Finding.score populated (CWE base + path boost)
            ↓
-     normalizer         →  combined_results.json written to disk
+     normalizer         →  triage_findings.json written to disk
            ↓
    [Manual step]
      LLM agent (agents/scan-repo.md)
-       reads   <output_dir>/<repo_name>/.sast-results/combined_results.json
+       reads   <output_dir>/<repo_name>/.sast-results/triage_findings.json
        writes  <output_dir>/<repo_name>/triage_report.json
 ```
 
@@ -77,7 +77,7 @@ sast-llm-triage --repo <url-or-local-path> \
 
 | Code | Meaning |
 | ------ | --------- |
-| 0 | Success — `combined_results.json` written |
+| 0 | Success — `triage_findings.json` written |
 | 1 | Scan tool error (non-zero exit from veracode / semgrep / snyk) |
 | 2 | Configuration or argument error |
 
@@ -256,7 +256,7 @@ score = cwe_base_score + path_boost
 1. Filters findings to the configured qualifying CWE set.
 2. Sorts: severity descending, `int(cwe_id)` ascending, `issue_id` ascending.
 3. Caps at `max_findings` (default 60); sets `capped: true` when truncated.
-4. Writes `<sast_dir>/combined_results.json` with structure:
+4. Writes `<sast_dir>/triage_findings.json` with structure:
 
     ```json
     {
@@ -284,7 +284,7 @@ score = cwe_base_score + path_boost
       .semgrep/              ← raw Semgrep JSON output (semgrep only)
       .snyk/                 ← raw Snyk SARIF JSON output (snyk only)
       raw_findings.json      ← all findings before CWE filter
-      combined_results.json  ← filtered, scored, enriched (LLM agent input)
+      triage_findings.json  ← filtered, scored, enriched (LLM agent input)
     triage_report.json       ← written by LLM agent after manual triage
 ```
 
@@ -300,7 +300,7 @@ output:
 
 scan:
   context_lines: 8       # source lines of context around each finding
-  max_findings: 60       # cap for combined_results.json
+  max_findings: 60       # cap for triage_findings.json
   qualifying_cwes:       # CWE IDs to include (string values)
     - "22"
     - "73"
@@ -330,7 +330,7 @@ Environment variables (never stored in config files):
 
 ## 11. LLM Agent Integration
 
-After `combined_results.json` is written the tool prints:
+After `triage_findings.json` is written the tool prints:
 
 ```text
 ─────────────────────────────────────
@@ -349,7 +349,7 @@ and provide the following task context:
 ```
 
 The `agents/scan-repo.md` agent reads
-`<output_dir>/<repo_name>/.sast-results/combined_results.json` and writes
+`<output_dir>/<repo_name>/.sast-results/triage_findings.json` and writes
 `<output_dir>/<repo_name>/triage_report.json`.
 
 ---

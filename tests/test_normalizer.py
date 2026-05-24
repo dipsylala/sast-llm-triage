@@ -100,11 +100,11 @@ class TestNormalizeCap:
 
 
 class TestNormalizeOutput:
-    def test_combined_results_written(self, tmp_path: Path):
+    def test_triage_findings_written(self, tmp_path: Path):
         result = _make_result([make_finding(cwe_id="89")])
         combined_path = normalize(result, QUALIFYING, max_findings=60, sast_dir=tmp_path)
         assert combined_path.exists()
-        assert combined_path.name == "combined_results.json"
+        assert combined_path.name == "triage_findings.json"
 
     def test_raw_findings_written(self, tmp_path: Path):
         result = _make_result([make_finding(cwe_id="89")])
@@ -114,7 +114,7 @@ class TestNormalizeOutput:
         data = json.loads(raw_path.read_text())
         assert "findings" in data
 
-    def test_combined_results_structure(self, tmp_path: Path):
+    def test_triage_findings_structure(self, tmp_path: Path):
         findings = [make_finding(cwe_id="89", issue_id="1")]
         result = _make_result(findings, repo_name="test-repo")
         result.repo_url = "https://github.com/owner/test-repo"

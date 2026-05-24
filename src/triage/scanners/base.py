@@ -78,11 +78,14 @@ def run_cmd(
     return returncode == 0, "".join(output_lines)
 
 
-def capture_cmd(cmd: list[str], cwd: Path) -> tuple[bool, str, str]:
+def capture_cmd(cmd: list[str], cwd: Path, *, shell: bool = False) -> tuple[bool, str, str]:
     """Run *cmd* and capture stdout and stderr separately.
 
     Returns ``(success, stdout, stderr)``.  Does not stream to the console —
     callers must print what they need.
+
+    Pass ``shell=True`` on Windows to let ``cmd.exe`` resolve shell wrappers
+    such as ``.cmd`` files that ``CreateProcess`` cannot execute directly.
     """
     try:
         result = subprocess.run(
@@ -93,6 +96,7 @@ def capture_cmd(cmd: list[str], cwd: Path) -> tuple[bool, str, str]:
             text=True,
             encoding="utf-8",
             errors="replace",
+            shell=shell,
         )
     except FileNotFoundError as exc:
         return False, "", f"executable not found: {exc}"

@@ -25,6 +25,7 @@ import json
 import logging
 import re
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -157,6 +158,9 @@ def _parse_snyk_result(
     )
 
 
+_VALID_THRESHOLDS: frozenset[str] = frozenset({"low", "medium", "high", "critical"})
+
+
 def scan(local_path: Path, cfg: SnykConfig, sast_dir: Path | None = None) -> ScanResult:
     """Run ``snyk code test`` against *local_path* and return a :class:`ScanResult`.
 
@@ -173,11 +177,10 @@ def scan(local_path: Path, cfg: SnykConfig, sast_dir: Path | None = None) -> Sca
         RuntimeError: If Snyk exits with an error code ≥ 2, produces no output,
             or the output cannot be parsed as valid JSON.
     """
-    if not shutil.which("snyk"):
-        raise RuntimeError(
-            "snyk is not installed or not on PATH.\n"
-            "Install it from https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli\n"
-            "then run: snyk auth"
+    if cfg.severity_threshold and cfg.severity_threshold not in _VALID_THRESHOLDS:
+        raise ValueError(
+            f"Invalid snyk severity_threshold {cfg.severity_threshold!r}. "
+            f"Must be one of: {', '.join(sorted(_VALID_THRESHOLDS))}"
         )
 
     repo_name = local_path.name
@@ -190,21 +193,34 @@ def scan(local_path: Path, cfg: SnykConfig, sast_dir: Path | None = None) -> Sca
     print(f"\n[snyk] Scanning {local_path} ...")
     print(f"  $ {' '.join(cmd)}")
 
-    ok, stdout, stderr = capture_cmd(cmd, cwd=local_path)
+    # On Windows, snyk is typically a .cmd or .ps1 wrapper that CreateProcess
+    # cannot execute directly.  shell=True delegates resolution to cmd.exe,
+    # which handles these wrappers exactly as an interactive shell would.
+    ok, stdout, stderr = capture_cmd(cmd, cwd=local_path, shell=sys.platform == "win32")
 
     # Snyk exits with 1 when findings are present — not an error.
     # Exit codes ≥ 2 indicate a genuine failure (e.g. auth error, bad path).
     # capture_cmd reports ok=False for any non-zero exit; we accept exit code 1
-    # when there is valid JSON output and no auth-error keywords.
-    has_valid_findings_output = bool(stdout.strip()) and not (
-        "authentication" in (stdout + stderr).lower()
-        or "not authenticated" in (stdout + stderr).lower()
+    # when there is parseable JSON in stdout.
+    # NOTE: auth keywords must only be checked in stderr — stdout is SARIF JSON
+    # that routinely contains words like "authentication" inside finding
+    # descriptions (e.g. "Improper Authentication" vulnerability titles).
+    auth_error_in_stderr = (
+        "authentication" in stderr.lower()
+        or "not authenticated" in stderr.lower()
+        or "missing authentication" in stderr.lower()
     )
+    has_valid_findings_output = bool(stdout.strip()) and not auth_error_in_stderr
 
     if not ok and not has_valid_findings_output:
+        if "executable not found" in stderr or "FileNotFoundError" in stderr:
+            raise RuntimeError(
+                "snyk executable not found. Install the Snyk CLI and run `snyk auth`:\n"
+                "  https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli"
+            )
         hint = (
             "\n  Hint: run `snyk auth` to authenticate with Snyk before scanning."
-            if "auth" in (stdout + stderr).lower()
+            if auth_error_in_stderr or "snyk auth" in stderr.lower()
             else ""
         )
         raise RuntimeError(

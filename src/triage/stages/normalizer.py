@@ -3,7 +3,7 @@
 Filters findings to the qualifying CWE set, sorts, and writes two output files:
 
 - ``<sast_dir>/raw_findings.json``     — all pre-filter findings
-- ``<sast_dir>/combined_results.json`` — filtered, sorted, ready for
+- ``<sast_dir>/triage_findings.json`` — filtered, sorted, ready for
   the LLM triage agent (optionally capped via ``max_findings`` config)
 """
 
@@ -38,18 +38,18 @@ def normalize(
     sast_dir: Path,
     repo_url: str | None = None,
 ) -> Path:
-    """Filter, sort, cap, enrich, and write ``combined_results.json``.
+    """Filter, sort, cap, enrich, and write ``triage_findings.json``.
 
     Args:
         result: The enriched and scored :class:`ScanResult`.
         qualifying_cwes: Set of CWE ID strings to include.
-        max_findings: Maximum number of findings in ``combined_results.json``.
+        max_findings: Maximum number of findings in ``triage_findings.json``.
         sast_dir: Directory where output files are written
             (``<output_dir>/<repo_name>/.sast-results``).
         repo_url: Original remote URL, if known.
 
     Returns:
-        Absolute path to the written ``combined_results.json``.
+        Absolute path to the written ``triage_findings.json``.
     """
     sast_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,7 +82,7 @@ def normalize(
             )
         combined.append(d)
 
-    # --- Write combined_results.json ---
+    # --- Write triage_findings.json ---
     payload = {
         "repo": result.repo_name,
         "repo_url": repo_url,
@@ -93,14 +93,14 @@ def normalize(
         "findings": combined,
     }
 
-    combined_out = sast_dir / "combined_results.json"
+    combined_out = sast_dir / "triage_findings.json"
     combined_out.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
 
     logger.info(
-        "combined_results written: %d/%d qualifying finding(s)%s → %s",
+        "triage_findings written: %d/%d qualifying finding(s)%s → %s",
         len(combined),
         total_qualifying,
         " (capped)" if capped else "",

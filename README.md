@@ -1,7 +1,7 @@
 # sast-llm-triage
 
 A CLI tool that scans a Git repository with **Veracode**, **Semgrep**, or **Snyk Code**,
-enriches and scores the findings, and writes a structured `combined_results.json` ready
+enriches and scores the findings, and writes a structured `triage_findings.json` ready
 for LLM-assisted exploitability triage via an IDE agent.
 
 ---
@@ -26,7 +26,7 @@ uv run sast-llm-triage --repo https://github.com/your-org/your-repo --scanner ve
 
 Once the scan completes, open `agents/scan-repo.md` in your IDE agent (GitHub
 Copilot, Claude Code, etc.) and supply the `repo_name` and `output_dir` values
-printed at the end of the run.  The agent reads `combined_results.json` and
+printed at the end of the run.  The agent reads `triage_findings.json` and
 writes `triage_report.json`.
 
 ---
@@ -57,7 +57,7 @@ output/
       .semgrep/              ← raw Semgrep JSON output (semgrep only)
       .snyk/                 ← raw Snyk SARIF JSON output (snyk only)
       raw_findings.json      ← all findings before CWE filtering
-      combined_results.json  ← filtered, scored, enriched — LLM agent input
+      triage_findings.json  ← filtered, scored, enriched — LLM agent input
     triage_report.json       ← written by the LLM agent after triage
 ```
 

@@ -10,7 +10,7 @@ from typing import Any
 class Finding:
     """A single vulnerability finding produced by Veracode or Semgrep.
 
-    Fields are intentionally compatible with the ``combined_results.json``
+    Fields are intentionally compatible with the ``triage_findings.json``
     schema consumed by ``agents/scan-repo.md``.
     """
 

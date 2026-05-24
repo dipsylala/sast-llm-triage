@@ -24,7 +24,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="sast-llm-triage",
         description=(
             "Scan a Git repository with Veracode, Semgrep, or Snyk, enrich and "
-            "score the findings, and write combined_results.json for LLM triage."
+            "score the findings, and write triage_findings.json for LLM triage."
         ),
     )
     parser.add_argument(
@@ -52,7 +52,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--qualifying-cwes",
         default=None,
         help=(
-            "Comma-separated CWE IDs to include in combined_results.json "
+            "Comma-separated CWE IDs to include in triage_findings.json "
             "(overrides config file value)."
         ),
     )

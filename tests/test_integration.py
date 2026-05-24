@@ -1,4 +1,4 @@
-"""Integration tests — full pipeline from scan through combined_results.json.
+"""Integration tests — full pipeline from scan through triage_findings.json.
 
 Each test exercises all four stages (scan → enrich → score → normalize)
 against a real temporary repository directory.  Only the external CLI call
@@ -76,7 +76,7 @@ _SEMGREP_OUTPUT = json.dumps({
 class TestSemgrepPipeline:
     """Full pipeline: semgrep scan → enrich → score → normalize."""
 
-    def test_combined_results_written(self, mini_repo: Path, tmp_path: Path):
+    def test_triage_findings_written(self, mini_repo: Path, tmp_path: Path):
         cfg = SemgrepConfig(config="auto", pro=False)
         sast_dir = tmp_path / "out" / ".sast-results"
 
@@ -214,7 +214,7 @@ class TestVeracodePipeline:
         payload = json.loads(combined_path.read_text(encoding="utf-8"))
         return payload, payload["findings"]
 
-    def test_combined_results_written(self, mini_repo: Path, tmp_path: Path):
+    def test_triage_findings_written(self, mini_repo: Path, tmp_path: Path):
         payload, findings = self._run_pipeline(mini_repo, tmp_path)
 
         assert payload["scan_engine"] == "veracode"

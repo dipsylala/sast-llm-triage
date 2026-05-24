@@ -3,7 +3,7 @@ output:
 
 scan:
   context_lines: 8      # source lines of context either side of the finding line
-  # max_findings: not set — all qualifying findings are written to combined_results.json
+  # max_findings: not set — all qualifying findings are written to triage_findings.json
   qualifying_cwes:
     - "22"
     - "73"

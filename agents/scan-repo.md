@@ -12,7 +12,7 @@ unusually difficult conditions, or a false positive.  Write the results to
 ## FIRST STEP — MANDATORY
 
 **Before doing anything else**, check whether
-`<output_dir>/<repo_name>/.sast-results/combined_results.json` exists.
+`<output_dir>/<repo_name>/.sast-results/triage_findings.json` exists.
 
 - **If it exists**: Use this file as your sole findings input.  It already
   contains the filtered, sorted, capped findings with source excerpts attached.
@@ -23,7 +23,7 @@ unusually difficult conditions, or a false positive.  Write the results to
 - **If it does not exist**: The `sast-llm-triage` tool has not been run yet, or
   something went wrong.  Stop and inform the user — do not proceed.
 - **If it exists but is not valid JSON**: Stop and inform the user:
-  `combined_results.json exists but is not valid JSON — cannot proceed.`
+  `triage_findings.json exists but is not valid JSON — cannot proceed.`
 
 ---
 
@@ -33,7 +33,7 @@ unusually difficult conditions, or a false positive.  Write the results to
   context, e.g. `FUEL-CMS`).
 - **`output_dir`** — absolute path to the output root (provided in the task
   context; default: the `output/` folder inside the `repo-triage` project).
-- **Input file** — `<output_dir>/<repo_name>/.sast-results/combined_results.json`
+- **Input file** — `<output_dir>/<repo_name>/.sast-results/triage_findings.json`
 - **Source code** — the cloned repo lives at `<output_dir>/<repo_name>/` (when
   cloned from a URL) or at the path provided to `--repo` (when scanned from a
   local path).  For local-path scans the agent context should include the
@@ -79,7 +79,7 @@ Coverage intent:
 
 If the task context provides extra CWE IDs, include them.
 
-If `combined_results.json` contains a finding whose `cwe_id` is not in the
+If `triage_findings.json` contains a finding whose `cwe_id` is not in the
 active scope, include it in the triage report but prepend the following to its
 `reasoning`: `NOTE: cwe_id <X> is outside the active triage scope.`
 
@@ -114,11 +114,11 @@ stack_dumps     — list of normalized data-flow paths (present only when the
 
 ### Tool policy
 
-- Allowed: `read_file` for `combined_results.json` and source analysis.
+- Allowed: `read_file` for `triage_findings.json` and source analysis.
 - Forbidden: terminal parsing commands (`Get-Content`, `ConvertFrom-Json`,
   `grep`, `rg`, or shell/PowerShell parsing) to read findings JSON.
 
-### Reading combined_results.json
+### Reading triage_findings.json
 
 The file was already loaded in the FIRST STEP.  Proceed directly using its
 `findings` array.
@@ -143,7 +143,7 @@ The file contains:
   `stack_dumps` when the rule uses `mode: taint`; pattern-matching rules (the
   majority) produce no trace and will not have this field.
 
-If `combined_results.json` exists but parses as valid JSON with an empty
+If `triage_findings.json` exists but parses as valid JSON with an empty
 `findings` array, write `[]` to `triage_report.json` and respond with:
 `[<repo_name>] done — 0 finding(s) assessed, written to <path>`.
 
@@ -163,7 +163,7 @@ confirming evidence when a verdict is already clear from the excerpt.
 
 ### 1. Read the sink
 
-Use the `source_excerpt` from `combined_results.json` as your starting point.
+Use the `source_excerpt` from `triage_findings.json` as your starting point.
 Only call `read_file` on the actual source file if you need context beyond the
 ±8 lines already provided.  Identify:
 
@@ -318,7 +318,7 @@ Write results to `<output_dir>/<repo_name>/triage_report.json`.  Structure:
     "confidence": "medium",
     "summary": "One-sentence summary of the flaw and taint path.",
     "reasoning": "Detailed explanation: where taint originates, what sanitization (if any) was observed, why the verdict was assigned.",
-    "source_excerpt": "Copy the source_excerpt value from combined_results.json, trimmed to the 4 lines nearest the flagged line."
+    "source_excerpt": "Copy the source_excerpt value from triage_findings.json, trimmed to the 4 lines nearest the flagged line."
   }
 ]
 ```
