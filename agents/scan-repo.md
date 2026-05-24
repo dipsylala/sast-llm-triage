@@ -54,29 +54,6 @@ Default CWE IDs:
 415, 416, 502, 601, 611, 676, 787, 823, 824, 918
 ```
 
-Coverage intent:
-
-| CWE | Category |
-| --- | --- |
-| 22, 73, 98 | Path traversal, externally controlled path, file inclusion |
-| 77, 78, 88 | Command and argument injection |
-| 79, 80 | Cross-site scripting variants |
-| 89 | SQL injection |
-| 94, 95 | Code / eval injection |
-| 118, 120, 121, 125, 129, 135, 170, 193, 787, 823, 824 | Buffer, bounds, pointer, null-termination, and off-by-one errors |
-| 134 | Uncontrolled format string |
-| 190, 191, 192, 195, 196, 197 | Integer overflow, underflow, coercion, conversion, and truncation |
-| 209 | Information exposure through error messages |
-| 242, 676 | Dangerous C/C++ functions |
-| 295 | Improper certificate validation |
-| 319, 327 | Cleartext transmission and weak cryptography |
-| 367 | Time-of-check time-of-use (TOCTOU) race condition |
-| 415, 416 | Double free and use-after-free |
-| 502 | Unsafe deserialization |
-| 601 | Open redirect |
-| 611 | XML external entity processing |
-| 918 | Server-side request forgery |
-
 If the task context provides extra CWE IDs, include them.
 
 If `triage_findings.json` contains a finding whose `cwe_id` is not in the
