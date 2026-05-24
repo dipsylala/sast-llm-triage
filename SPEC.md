@@ -337,4 +337,61 @@ uv sync
 uv run sast-llm-triage --help
 ```
 
+---
+
+## 13. Future Work
+
+### 13.1 SDK-based headless triage
+
+The current triage step is intentionally manual: the CLI produces
+`triage_findings.json` and the user invokes `agents/scan-repo.md` inside a
+VS Code agent session (Copilot, Claude Code, etc.).
+
+A future `--triage` flag would drive triage directly from the CLI using
+**[LiteLLM](https://github.com/BerriAI/litellm)** — a single library that
+normalises OpenAI and Anthropic (and many other providers) behind one
+`completion()` call, eliminating any per-provider SDK code:
+
+```bash
+uv run sast-llm-triage --repo <url> --scanner snyk --triage
+```
+
+#### Per-finding call model
+
+Each finding in `triage_findings.json` already carries `source_excerpt` and
+`stack_dumps`, so the majority of verdicts require only a **single API call**.
+For findings where the model needs to inspect code outside the enriched
+excerpt, a `read_file` tool is exposed and handled in a **short tool-call
+loop** — no agent framework required:
+
+```python
+while True:
+    response = litellm.completion(model=model, messages=messages, tools=[READ_FILE_TOOL])
+    msg = response.choices[0].message
+    if msg.tool_calls:
+        messages.append(msg)
+        for tc in msg.tool_calls:
+            messages.append({"role": "tool", "tool_call_id": tc.id,
+                             "content": read_file(tc, repo_root)})  # sandboxed
+    else:
+        return msg.content  # verdict JSON
+```
+
+LiteLLM translates the OpenAI tool-call message format to Anthropic's native
+tool-use format automatically — the loop is written once.
+
+#### Design constraints
+
+- `triage_findings.json` remains the handoff contract; the headless mode reads
+  the same file the IDE agent reads.
+- `triage_report.json` schema is unchanged; only the producer changes.
+- Provider and model are configurable via `config.yaml` and environment
+  variables (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
+- `agents/triage-finding.md` becomes the system/user prompt template — no
+  duplication of prompting logic.
+- `read_file` tool calls are path-traversal checked and sandboxed to
+  `repo_root` before execution.
+- Rate-limiting and per-finding cost tracking are required given one call
+  (or loop) per qualifying finding.
+
 

@@ -93,17 +93,38 @@ uv run python -m pytest
 The triage step currently requires an IDE agent session (GitHub Copilot, Claude
 Code, etc.) because the orchestrator/worker pattern relies on IDE primitives.
 A future `--triage` flag would replace that manual step with direct API calls
-via the **OpenAI** or **Anthropic** Python SDK, making the full pipeline
-runnable headlessly from the CLI:
+via **[LiteLLM](https://github.com/BerriAI/litellm)** — a single Python library
+that wraps both OpenAI and Anthropic (and many other providers) behind one
+uniform `completion()` interface. No per-provider SDK, no code duplication.
 
 ```bash
 uv run sast-llm-triage --repo <url> --scanner snyk --triage
+```
+
+Because each finding already arrives with `source_excerpt` and `stack_dumps`
+pre-packed by the enricher, most verdicts need only a single API call.
+For cases where the model needs to look beyond the enriched excerpt, a
+`read_file` tool can be exposed and the response handled in a short
+tool-call loop — all still within LiteLLM, without a separate agent framework:
+
+```python
+while True:
+    response = litellm.completion(model=model, messages=messages, tools=tools)
+    msg = response.choices[0].message
+    if msg.tool_calls:          # model wants to read more code
+        messages.append(msg)
+        for tc in msg.tool_calls:
+            messages.append({"role": "tool", "tool_call_id": tc.id,
+                             "content": read_file(tc, repo_root)})
+    else:
+        return msg.content      # final verdict JSON
 ```
 
 Key design points:
 
 - `triage_findings.json` stays the handoff contract — same file the IDE agent reads today.
 - `triage_report.json` format is unchanged; only the producer changes.
-- Provider and model configurable via `config.yaml` / env vars (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
-- `agents/triage-finding.md` becomes the prompt template for each API call — no logic duplication.
-- One API call per qualifying finding, so cost and rate-limit handling will be needed.
+- Provider and model set via `config.yaml` / env vars (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
+- `agents/triage-finding.md` becomes the prompt template — no logic duplication.
+- `read_file` tool is sandboxed to the cloned repo root (path-traversal check).
+- One LiteLLM call (or short loop) per finding; cost and rate-limit handling needed.
