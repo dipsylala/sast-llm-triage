@@ -57,8 +57,8 @@ output/
       .semgrep/              ← raw Semgrep JSON output (semgrep only)
       .snyk/                 ← raw Snyk SARIF JSON output (snyk only)
       raw_findings.json      ← all findings before CWE filtering
-      triage_findings.json  ← filtered, scored, enriched — LLM agent input
-    triage_report.json       ← written by the LLM agent after triage
+      triage_findings.json   ← filtered, scored, enriched — LLM agent input
+      triage_report.json     ← written by the LLM agent after triage
 ```
 
 ### Scan engines
@@ -83,3 +83,27 @@ uv sync --extra semgrep
 
 uv run python -m pytest
 ```
+
+---
+
+## Roadmap
+
+### SDK-based triage (non-IDE execution)
+
+The triage step currently requires an IDE agent session (GitHub Copilot, Claude
+Code, etc.) because the orchestrator/worker pattern relies on IDE primitives.
+A future `--triage` flag would replace that manual step with direct API calls
+via the **OpenAI** or **Anthropic** Python SDK, making the full pipeline
+runnable headlessly from the CLI:
+
+```bash
+uv run sast-llm-triage --repo <url> --scanner snyk --triage
+```
+
+Key design points:
+
+- `triage_findings.json` stays the handoff contract — same file the IDE agent reads today.
+- `triage_report.json` format is unchanged; only the producer changes.
+- Provider and model configurable via `config.yaml` / env vars (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
+- `agents/triage-finding.md` becomes the prompt template for each API call — no logic duplication.
+- One API call per qualifying finding, so cost and rate-limit handling will be needed.

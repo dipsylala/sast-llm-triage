@@ -249,8 +249,8 @@ Findings whose file does not exist or cannot be read receive
       .semgrep/              ← raw Semgrep JSON output (semgrep only)
       .snyk/                 ← raw Snyk SARIF JSON output (snyk only)
       raw_findings.json      ← all findings before CWE filter
-      triage_findings.json  ← filtered, enriched (LLM agent input)
-    triage_report.json       ← written by LLM agent after manual triage
+      triage_findings.json   ← filtered, enriched (LLM agent input)
+      triage_report.json     ← written by LLM agent after manual triage
 ```
 
 ---
@@ -314,7 +314,7 @@ and provide the following task context:
 
 The `agents/scan-repo.md` agent reads
 `<output_dir>/<repo_name>/.sast-results/triage_findings.json` and writes
-`<output_dir>/<repo_name>/triage_report.json`.
+`<output_dir>/<repo_name>/.sast-results/triage_report.json`.
 
 ---
 
@@ -336,3 +336,5 @@ cd repo-triage
 uv sync
 uv run sast-llm-triage --help
 ```
+
+
