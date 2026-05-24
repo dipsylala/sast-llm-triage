@@ -39,7 +39,7 @@ discovery pipeline.
 
 ## 4. System Architecture
 
-```
+```text
 CLI input (--repo URL | local-path, --scanner veracode|semgrep|snyk)
            ↓
      repo_cloner        →  local_path (cloned or validated)
@@ -65,7 +65,7 @@ CLI input (--repo URL | local-path, --scanner veracode|semgrep|snyk)
 
 ## 5. CLI Interface
 
-```
+```text
 sast-llm-triage --repo <url-or-local-path> \
             --scanner veracode|semgrep|snyk \
             [--output-dir <dir>]         # default: ./output
@@ -76,10 +76,10 @@ sast-llm-triage --repo <url-or-local-path> \
 ### Exit codes
 
 | Code | Meaning |
-|------|---------|
-| 0    | Success — `combined_results.json` written |
-| 1    | Scan tool error (non-zero exit from veracode / semgrep / snyk) |
-| 2    | Configuration or argument error |
+| ------ | --------- |
+| 0 | Success — `combined_results.json` written |
+| 1 | Scan tool error (non-zero exit from veracode / semgrep / snyk) |
+| 2 | Configuration or argument error |
 
 ---
 
@@ -108,7 +108,7 @@ sast-llm-triage --repo <url-or-local-path> \
 ### 6.3 Snyk Code
 
 - Requires the **Snyk CLI** (`snyk`) in PATH.
-  Install: https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli
+  Install: [https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli](https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli)
 - Requires a one-time `snyk auth` before first use.
 - `snyk code test --json <local_path>` sends the source tree to the **Snyk
   cloud analysis API** and returns findings as a SARIF 2.1.0 document.
@@ -124,7 +124,7 @@ sast-llm-triage --repo <url-or-local-path> \
 ### 7.1 Finding
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `issue_id` | `str` | Unique ID within this scan |
 | `scan_file` | `str` | Source filename (Veracode: filtered JSON name; Semgrep: `"semgrep"`; Snyk: `"snyk"`) |
 | `cwe_id` | `str` | CWE number as string, e.g. `"89"` |
@@ -141,7 +141,7 @@ sast-llm-triage --repo <url-or-local-path> \
 ### 7.2 ScanResult
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `repo_name` | `str` | Repository name (derived from URL or path) |
 | `repo_path` | `Path` | Absolute path to the cloned/provided source |
 | `scan_engine` | `str` | `"veracode"`, `"semgrep"`, or `"snyk"` |
@@ -226,14 +226,14 @@ Findings whose file does not exist or cannot be read receive
 
 Scores each `Finding` in place:
 
-```
+```text
 score = cwe_base_score + path_boost
 ```
 
 **CWE base scores:**
 
 | CWE(s) | Score | Category |
-|--------|-------|----------|
+| -------- | ------- | ---------- |
 | 77, 78 | 10 | Command injection |
 | 120, 121, 787 | 10 | Buffer overflow |
 | 415, 416 | 9 | Double free / use-after-free |
@@ -247,6 +247,7 @@ score = cwe_base_score + path_boost
 | (default) | 2 | Any other qualifying CWE |
 
 **Path boosts (+3 each):**
+
 - file path contains `controllers/`
 - file path contains `routes/`
 
@@ -257,17 +258,17 @@ score = cwe_base_score + path_boost
 3. Caps at `max_findings` (default 60); sets `capped: true` when truncated.
 4. Writes `<sast_dir>/combined_results.json` with structure:
 
-```json
-{
-  "repo": "<repo_name>",
-  "repo_url": "<url-or-null>",
-  "scan_engine": "veracode|semgrep|snyk",
-  "total_qualifying": 42,
-  "assessed_count": 42,
-  "capped": false,
-  "findings": [ ... ]
-}
-```
+    ```json
+    {
+      "repo": "<repo_name>",
+      "repo_url": "<url-or-null>",
+      "scan_engine": "veracode|semgrep|snyk",
+      "total_qualifying": 42,
+      "assessed_count": 42,
+      "capped": false,
+      "findings": [ ... ]
+    }
+    ```
 
 5. Also writes `<sast_dir>/raw_findings.json` with all pre-filter findings.
 
@@ -275,7 +276,7 @@ score = cwe_base_score + path_boost
 
 ## 9. Output Layout
 
-```
+```text
 <output_dir>/
   <repo_name>/
     .sast-results/
@@ -320,7 +321,7 @@ snyk:
 Environment variables (never stored in config files):
 
 | Variable | Used by |
-|----------|---------|
+| ---------- | --------- |
 | `VERACODE_API_ID` | Veracode CLI authentication |
 | `VERACODE_API_KEY` | Veracode CLI authentication |
 | `SEMGREP_APP_TOKEN` | Semgrep Pro Engine (optional) |
@@ -331,7 +332,7 @@ Environment variables (never stored in config files):
 
 After `combined_results.json` is written the tool prints:
 
-```
+```text
 ─────────────────────────────────────
 LLM triage ready.
 
@@ -356,12 +357,14 @@ The `agents/scan-repo.md` agent reads
 ## 12. Prerequisites
 
 | Tool | How to obtain |
-|------|--------------|
+| ------ | -------------- |
 | Python ≥ 3.11 | System or pyenv |
 | uv | `pip install uv` or `cargo install uv` |
 | git | System |
 | Veracode CLI | [Veracode docs](https://docs.veracode.com/r/c_about_veracode_static_cli) — must be in PATH |
-| semgrep | Installed automatically by `uv sync` (PyPI dependency) || Snyk CLI | [Snyk docs](https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli) — must be in PATH; run `snyk auth` after install |
+| semgrep | Installed automatically by `uv sync` (PyPI dependency) |
+| Snyk CLI | [Snyk docs](https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli) — must be in PATH; run `snyk auth` after install |
+
 Setup:
 
 ```bash

@@ -64,7 +64,7 @@ output/
 ### Scan engines
 
 | Engine | How it runs | Credentials |
-|--------|-------------|-------------|
+| -------- | ------------- | ------------- |
 | Semgrep | Entirely local — source code never leaves the machine | None required for OSS; run `semgrep login` before enabling `semgrep.pro: true` in config |
 | Snyk Code | Source tree sent to Snyk cloud analysis API | Install Snyk CLI ([docs](https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli)), then run `snyk auth` once |
 | Veracode | Packages locally; analysis runs in Veracode Pipeline Scan cloud API | Veracode API keys required |
