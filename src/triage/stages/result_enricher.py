@@ -79,7 +79,7 @@ def _build_excerpt(lines: list[str], sink_line: int, context: int) -> str:
 def enrich(
     findings: list[Finding],
     local_path: Path,
-    context_lines: int = 8,
+    context_lines: int = 4,
 ) -> list[Finding]:
     """Populate ``Finding.source_excerpt`` for every finding in *findings*.
 

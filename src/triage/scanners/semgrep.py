@@ -58,7 +58,7 @@ def _extract_cwe(cwe_field: Any) -> str:
     return ""
 
 
-def _normalize_semgrep_trace(trace: dict | None) -> list[dict] | None:
+def _normalize_semgrep_trace(trace: dict | None, local_path: Path) -> list[dict] | None:
     """Convert Semgrep's ``extra.dataflow_trace`` to the common dataflow trace schema.
 
     Semgrep always produces a single path per finding; it is returned as a
@@ -91,8 +91,16 @@ def _normalize_semgrep_trace(trace: dict | None) -> list[dict] | None:
 
     def _node_step(node: dict | list) -> dict:
         loc, content = _extract_loc_content(node)
+        file_str = str(loc.get("path", ""))
+        _fp = Path(file_str)
+        if _fp.is_absolute():
+            try:
+                file_str = _fp.relative_to(local_path.resolve()).as_posix()
+            except ValueError:
+                pass  # outside repo root — leave as-is
+        file_str = file_str.replace("\\", "/")
         return {
-            "file": str(loc.get("path", "")),
+            "file": file_str,
             "line": int(loc.get("start", {}).get("line", 0)),
             "snippet": content,
         }
@@ -139,7 +147,7 @@ def _parse_semgrep_result(
     issue_id = f"{check_id}:{path}:{line}"
     display_text: str = str(extra.get("message", ""))
 
-    dataflow_trace: list[dict] | None = _normalize_semgrep_trace(extra.get("dataflow_trace"))
+    dataflow_trace: list[dict] | None = _normalize_semgrep_trace(extra.get("dataflow_trace"), local_path)
 
     return Finding(
         issue_id=issue_id,

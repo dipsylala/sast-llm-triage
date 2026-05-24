@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
 from pathlib import Path
 
 from triage.models import Finding, ScanResult
@@ -58,15 +59,36 @@ def normalize(
 
     # --- Filter ---
     qualifying = [f for f in result.findings if f.cwe_id in qualifying_cwes]
-    total_qualifying = len(qualifying)
+    total_pre_dedup = len(qualifying)
+
+    # --- Deduplicate by (file, line, cwe_id) ---
+    # Multiple rules often flag the same sink.  Keep one representative per
+    # unique location; the others are recorded in `also_flagged_by`.
+    groups: dict[tuple[str, int, str], list[Finding]] = defaultdict(list)
+    for f in qualifying:
+        groups[(f.file, f.line, f.cwe_id)].append(f)
+
+    also_flagged_by: dict[str, list[str]] = {}
+    representatives: list[Finding] = []
+    for group in groups.values():
+        # Prefer highest severity; break ties by preferring findings with stack_dumps.
+        rep = max(group, key=lambda f: (f.severity, 1 if f.stack_dumps else 0))
+        representatives.append(rep)
+        others = [f.issue_id for f in group if f.issue_id != rep.issue_id]
+        if others:
+            also_flagged_by[rep.issue_id] = others
+
+    total_qualifying = len(representatives)
 
     # --- Sort ---
-    qualifying.sort(key=_sort_key)
+    representatives.sort(key=_sort_key)
 
     # --- Build combined findings dicts ---
     combined: list[dict] = []  # type: ignore[type-arg]
-    for finding in qualifying:
+    for finding in representatives:
         d = finding.to_dict()
+        if finding.issue_id in also_flagged_by:
+            d["also_flagged_by"] = also_flagged_by[finding.issue_id]
         combined.append(d)
 
     # --- Write triage_findings.json ---
@@ -74,6 +96,7 @@ def normalize(
         "repo": result.repo_name,
         "repo_url": repo_url,
         "scan_engine": result.scan_engine,
+        "total_pre_dedup": total_pre_dedup,
         "total_qualifying": total_qualifying,
         "findings": combined,
     }
@@ -85,12 +108,13 @@ def normalize(
     )
 
     logger.info(
-        "triage_findings written: %d qualifying finding(s) → %s",
+        "triage_findings written: %d qualifying finding(s), %d after dedup → %s",
+        total_pre_dedup,
         total_qualifying,
         combined_out,
     )
 
-    _write_findings_summary(qualifying, sast_dir)
+    _write_findings_summary(representatives, sast_dir)
 
     return combined_out
 

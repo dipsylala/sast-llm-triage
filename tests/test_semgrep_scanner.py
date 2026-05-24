@@ -141,40 +141,40 @@ class TestNormalizesSemgrepTrace:
         }
 
     def test_source_mapped(self):
-        r = _normalize_semgrep_trace(self._make_trace())
+        r = _normalize_semgrep_trace(self._make_trace(), Path("."))
         assert r[0]["source"] == {"file": "app/routes.py", "line": 5, "snippet": "request.form['q']"}
 
     def test_sink_mapped(self):
-        r = _normalize_semgrep_trace(self._make_trace())
+        r = _normalize_semgrep_trace(self._make_trace(), Path("."))
         assert r[0]["sink"] == {"file": "app/db.py", "line": 42, "snippet": "cursor.execute(sql)"}
 
     def test_steps_mapped(self):
-        r = _normalize_semgrep_trace(self._make_trace(n_steps=2))
+        r = _normalize_semgrep_trace(self._make_trace(n_steps=2), Path("."))
         assert len(r[0]["steps"]) == 2
         assert r[0]["steps"][0] == {"file": "app/db.py", "line": 20, "snippet": "var_0"}
 
     def test_no_steps_returns_empty_list(self):
         trace = self._make_trace(n_steps=0)
-        r = _normalize_semgrep_trace(trace)
+        r = _normalize_semgrep_trace(trace, Path("."))
         assert r[0]["steps"] == []
 
     def test_always_returns_single_element_list(self):
-        r = _normalize_semgrep_trace(self._make_trace())
+        r = _normalize_semgrep_trace(self._make_trace(), Path("."))
         assert isinstance(r, list)
         assert len(r) == 1
 
     def test_missing_source_returns_none(self):
         trace = self._make_trace()
         del trace["taint_source"]
-        assert _normalize_semgrep_trace(trace) is None
+        assert _normalize_semgrep_trace(trace, Path(".")) is None
 
     def test_missing_sink_returns_none(self):
         trace = self._make_trace()
         del trace["taint_sink"]
-        assert _normalize_semgrep_trace(trace) is None
+        assert _normalize_semgrep_trace(trace, Path(".")) is None
 
     def test_none_input_returns_none(self):
-        assert _normalize_semgrep_trace(None) is None
+        assert _normalize_semgrep_trace(None, Path(".")) is None
 
 
 class TestSemgrepScan:

@@ -32,7 +32,7 @@ class TestNormalizeFiltering:
         assert data["findings"][0]["cwe_id"] == "89"
 
     def test_qualifying_findings_all_included(self, tmp_path: Path):
-        findings = [make_finding(cwe_id="89", issue_id=str(i)) for i in range(5)]
+        findings = [make_finding(cwe_id="89", issue_id=str(i), line=i + 1) for i in range(5)]
         result = _make_result(findings)
         combined_path = normalize(result, QUALIFYING, sast_dir=tmp_path)
         data = json.loads(combined_path.read_text())
@@ -42,9 +42,9 @@ class TestNormalizeFiltering:
 class TestNormalizeSortOrder:
     def test_sorted_by_severity_descending(self, tmp_path: Path):
         findings = [
-            make_finding(cwe_id="89", severity=2, issue_id="low"),
-            make_finding(cwe_id="89", severity=5, issue_id="high"),
-            make_finding(cwe_id="89", severity=3, issue_id="med"),
+            make_finding(cwe_id="89", severity=2, issue_id="low", line=1),
+            make_finding(cwe_id="89", severity=5, issue_id="high", line=2),
+            make_finding(cwe_id="89", severity=3, issue_id="med", line=3),
         ]
         result = _make_result(findings)
         combined_path = normalize(result, QUALIFYING, sast_dir=tmp_path)
@@ -143,9 +143,9 @@ class TestFindingsSummary:
 
     def test_summary_severity_and_cwe_counts(self, tmp_path: Path):
         findings = [
-            make_finding(cwe_id="89", severity=4, issue_id="1"),
-            make_finding(cwe_id="89", severity=4, issue_id="2"),
-            make_finding(cwe_id="78", severity=3, issue_id="3"),
+            make_finding(cwe_id="89", severity=4, issue_id="1", line=1),
+            make_finding(cwe_id="89", severity=4, issue_id="2", line=2),
+            make_finding(cwe_id="78", severity=3, issue_id="3", line=3),
         ]
         result = _make_result(findings)
         normalize(result, QUALIFYING, sast_dir=tmp_path)
@@ -161,3 +161,54 @@ class TestFindingsSummary:
         result = _make_result([])
         normalize(result, QUALIFYING, sast_dir=tmp_path)
         assert (tmp_path / "findings_summary.md").exists()
+
+
+class TestDeduplication:
+    def test_duplicate_sinks_collapsed_to_one(self, tmp_path: Path):
+        # Same file + line + cwe_id — three rules flagging one sink.
+        findings = [
+            make_finding(issue_id="rule-a", file="app/db.py", line=42, cwe_id="89", severity=4),
+            make_finding(issue_id="rule-b", file="app/db.py", line=42, cwe_id="89", severity=5),
+            make_finding(issue_id="rule-c", file="app/db.py", line=42, cwe_id="89", severity=3),
+        ]
+        result = _make_result(findings)
+        data = json.loads(normalize(result, QUALIFYING, sast_dir=tmp_path).read_text())
+        assert data["total_qualifying"] == 1
+        assert data["total_pre_dedup"] == 3
+        assert len(data["findings"]) == 1
+
+    def test_representative_is_highest_severity(self, tmp_path: Path):
+        findings = [
+            make_finding(issue_id="low",  file="app/db.py", line=42, cwe_id="89", severity=3),
+            make_finding(issue_id="high", file="app/db.py", line=42, cwe_id="89", severity=5),
+        ]
+        result = _make_result(findings)
+        data = json.loads(normalize(result, QUALIFYING, sast_dir=tmp_path).read_text())
+        assert data["findings"][0]["issue_id"] == "high"
+
+    def test_also_flagged_by_lists_duplicates(self, tmp_path: Path):
+        findings = [
+            make_finding(issue_id="rule-a", file="app/db.py", line=42, cwe_id="89", severity=4),
+            make_finding(issue_id="rule-b", file="app/db.py", line=42, cwe_id="89", severity=4),
+        ]
+        result = _make_result(findings)
+        data = json.loads(normalize(result, QUALIFYING, sast_dir=tmp_path).read_text())
+        rep = data["findings"][0]
+        assert "also_flagged_by" in rep
+        assert len(rep["also_flagged_by"]) == 1
+
+    def test_different_sinks_not_collapsed(self, tmp_path: Path):
+        findings = [
+            make_finding(issue_id="1", file="app/db.py", line=42, cwe_id="89"),
+            make_finding(issue_id="2", file="app/db.py", line=99, cwe_id="89"),
+            make_finding(issue_id="3", file="app/db.py", line=42, cwe_id="78"),
+        ]
+        result = _make_result(findings)
+        data = json.loads(normalize(result, QUALIFYING, sast_dir=tmp_path).read_text())
+        assert data["total_qualifying"] == 3
+        assert data["total_pre_dedup"] == 3
+
+    def test_unique_finding_has_no_also_flagged_by(self, tmp_path: Path):
+        result = _make_result([make_finding(cwe_id="89")])
+        data = json.loads(normalize(result, QUALIFYING, sast_dir=tmp_path).read_text())
+        assert "also_flagged_by" not in data["findings"][0]
