@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -137,6 +138,12 @@ def scan(local_path: Path, cfg: SemgrepConfig, sast_dir: Path | None = None) -> 
         RuntimeError: If semgrep exits with a non-zero code or its output
             cannot be parsed as JSON.
     """
+    if not shutil.which("semgrep"):
+        raise RuntimeError(
+            "semgrep is not installed or not on PATH.\n"
+            "Install it with: pip install semgrep"
+        )
+
     repo_name = local_path.name
 
     cmd = ["semgrep", "--config", cfg.config, "--json", "--dataflow-traces"]

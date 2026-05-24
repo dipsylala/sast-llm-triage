@@ -178,6 +178,16 @@ class TestScanFilteredJson:
         assert len(result.findings) == 1
         assert result.findings[0].cwe_id == "89"
 
+    def test_missing_binary_raises_with_install_hint(self, tmp_path: Path):
+        repo = tmp_path / "empty-repo"
+        repo.mkdir()
+        sast_dir = tmp_path / ".sast-results"
+        cfg = self._make_cfg()
+
+        with patch("triage.scanners.veracode.shutil.which", return_value=None):
+            with pytest.raises(RuntimeError, match="veracode is not installed"):
+                scan(repo, sast_dir, cfg)
+
     def test_scan_raises_when_no_packages(self, tmp_path: Path):
         repo = tmp_path / "empty-repo"
         repo.mkdir()
@@ -187,5 +197,5 @@ class TestScanFilteredJson:
         with patch(
             "triage.scanners.veracode.run_cmd", return_value=(False, "packaging failed")
         ):
-            with pytest.raises(RuntimeError, match="packaging"):
+            with pytest.raises(RuntimeError, match="package produced no output"):
                 scan(repo, sast_dir, cfg)

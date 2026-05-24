@@ -16,7 +16,7 @@ discovery pipeline.
 ## 2. Goals
 
 1. Accept a single repository (URL or local path) as input.
-2. Run a SAST scan using either **Veracode Pipeline Scan** or **Semgrep**.
+2. Run a SAST scan using **Veracode Pipeline Scan**, **Semgrep**, or **Snyk Code**.
 3. Enrich each finding with surrounding source-code context.
 4. Score findings by vulnerability type and file location.
 5. Produce a normalised `combined_results.json` capped at 60 findings, ready
@@ -40,13 +40,14 @@ discovery pipeline.
 ## 4. System Architecture
 
 ```
-CLI input (--repo URL | local-path, --scanner veracode|semgrep)
+CLI input (--repo URL | local-path, --scanner veracode|semgrep|snyk)
            ↓
      repo_cloner        →  local_path (cloned or validated)
            ↓
      scanner            →  ScanResult (raw Finding objects)
        veracode.py          veracode package + veracode static scan
        semgrep.py           semgrep --config auto [--pro]
+       snyk.py              snyk code test --json
            ↓
      result_enricher    →  Finding.source_excerpt populated (±8 lines)
            ↓
@@ -66,7 +67,7 @@ CLI input (--repo URL | local-path, --scanner veracode|semgrep)
 
 ```
 sast-llm-triage --repo <url-or-local-path> \
-            --scanner veracode|semgrep \
+            --scanner veracode|semgrep|snyk \
             [--output-dir <dir>]         # default: ./output
             [--config <config.yaml>]     # default: bundled config/config.yaml
             [--qualifying-cwes 22,78,89] # overrides config default
@@ -77,7 +78,7 @@ sast-llm-triage --repo <url-or-local-path> \
 | Code | Meaning |
 |------|---------|
 | 0    | Success — `combined_results.json` written |
-| 1    | Scan tool error (non-zero exit from veracode / semgrep) |
+| 1    | Scan tool error (non-zero exit from veracode / semgrep / snyk) |
 | 2    | Configuration or argument error |
 
 ---
@@ -104,6 +105,18 @@ sast-llm-triage --repo <url-or-local-path> \
   enable the Semgrep Pro Engine (interfile analysis). Free tier works without
   any token.
 
+### 6.3 Snyk Code
+
+- Requires the **Snyk CLI** (`snyk`) in PATH.
+  Install: https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli
+- Requires a one-time `snyk auth` before first use.
+- `snyk code test --json <local_path>` sends the source tree to the **Snyk
+  cloud analysis API** and returns findings as a SARIF 2.1.0 document.
+- Exit code 1 means findings were found (not an error); exit code ≥ 2 is a
+  genuine failure.
+- Raw SARIF output is saved to
+  `<output_dir>/<repo_name>/.sast-results/.snyk/raw_snyk_output.json`.
+
 ---
 
 ## 7. Data Models
@@ -113,17 +126,17 @@ sast-llm-triage --repo <url-or-local-path> \
 | Field | Type | Description |
 |-------|------|-------------|
 | `issue_id` | `str` | Unique ID within this scan |
-| `scan_file` | `str` | Source filename (Veracode: filtered JSON name; Semgrep: `"semgrep"`) |
+| `scan_file` | `str` | Source filename (Veracode: filtered JSON name; Semgrep: `"semgrep"`; Snyk: `"snyk"`) |
 | `cwe_id` | `str` | CWE number as string, e.g. `"89"` |
 | `issue_type` | `str` | Human-readable flaw category |
-| `severity` | `int` | 0–5 (Veracode scale: 4=High, 5=Very High) |
+| `severity` | `int` | 0–5 (Veracode scale: 4=High, 5=Very High; Snyk: `error`→5, `warning`→3, `note`/`none`→1) |
 | `file` | `str` | Repo-relative source file path |
 | `line` | `int` | Line number of the sink |
-| `scan_engine` | `str` | `"veracode"` or `"semgrep"` |
+| `scan_engine` | `str` | `"veracode"`, `"semgrep"`, or `"snyk"` |
 | `display_text` | `str` | Tool description of the flaw class |
 | `source_excerpt` | `str` | Sink line marked `>>>` plus ±8 context lines (set by enricher) |
 | `score` | `int` | Priority score (set by scorer) |
-| `stack_dumps` | `dict \| None` | Veracode data-flow trace (when present) |
+| `stack_dumps` | `dict \| None` | Normalised data-flow paths (source → sink) from Veracode, Semgrep, or Snyk when present |
 
 ### 7.2 ScanResult
 
@@ -131,7 +144,7 @@ sast-llm-triage --repo <url-or-local-path> \
 |-------|------|-------------|
 | `repo_name` | `str` | Repository name (derived from URL or path) |
 | `repo_path` | `Path` | Absolute path to the cloned/provided source |
-| `scan_engine` | `str` | `"veracode"` or `"semgrep"` |
+| `scan_engine` | `str` | `"veracode"`, `"semgrep"`, or `"snyk"` |
 | `findings` | `list[Finding]` | All raw findings from the scan |
 | `total_raw` | `int` | Count of raw findings before any filtering |
 
@@ -175,7 +188,25 @@ Returns the absolute `local_path` and `repo_name`.
    - `issue_type` = `check_id`
    - `scan_file` = `"semgrep"`
 
-Both scanners raise `RuntimeError` on non-zero exit.
+**SnykScanner.scan(local_path)**
+
+1. Runs `snyk code test --json [--severity-threshold <level>] <local_path>`
+   and captures stdout.
+2. Exit code 1 (findings present) is not treated as a failure; exit code ≥2
+   or an authentication error raises `RuntimeError` with a hint to run
+   `snyk auth`.
+3. Parses the SARIF 2.1.0 output (`runs[0].results[]` array);
+   builds a rule index from `runs[0].tool.driver.rules[]` for CWE lookup.
+4. Maps each result to a `Finding`:
+   - `issue_id` = `f"{ruleId}:{uri}:{startLine}"` (with `%SRCROOT%/` stripped)
+   - `cwe_id` = first CWE number from `rule.properties.cwe[]`
+   - `severity` = `error`→5, `warning`→3, `note`/`none`→1
+   - `issue_type` = `rule.shortDescription.text`
+   - `scan_file` = `"snyk"`
+   - `stack_dumps` = normalised from SARIF `codeFlows[].threadFlows[].locations[]`
+     (first location = source, last = sink, middle = steps)
+
+All scanners raise `RuntimeError` on fatal errors.
 
 ### 8.3 result_enricher
 
@@ -249,7 +280,8 @@ score = cwe_base_score + path_boost
   <repo_name>/
     .sast-results/
       .veracode/             ← Veracode packages + raw scan JSON (veracode only)
-      .semgrep/              ← raw semgrep JSON output (semgrep only)
+      .semgrep/              ← raw Semgrep JSON output (semgrep only)
+      .snyk/                 ← raw Snyk SARIF JSON output (snyk only)
       raw_findings.json      ← all findings before CWE filter
       combined_results.json  ← filtered, scored, enriched (LLM agent input)
     triage_report.json       ← written by LLM agent after manual triage
@@ -280,6 +312,9 @@ semgrep:
 veracode:
   package_dir_name: ".veracode"
   scan_workers: 1
+
+snyk:
+  severity_threshold: "low"  # low | medium | high | critical
 ```
 
 Environment variables (never stored in config files):
@@ -326,8 +361,7 @@ The `agents/scan-repo.md` agent reads
 | uv | `pip install uv` or `cargo install uv` |
 | git | System |
 | Veracode CLI | [Veracode docs](https://docs.veracode.com/r/c_about_veracode_static_cli) — must be in PATH |
-| semgrep | Installed automatically by `uv sync` (PyPI dependency) |
-
+| semgrep | Installed automatically by `uv sync` (PyPI dependency) || Snyk CLI | [Snyk docs](https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli) — must be in PATH; run `snyk auth` after install |
 Setup:
 
 ```bash

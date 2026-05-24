@@ -47,6 +47,11 @@ class VeracodeConfig:
 
 
 @dataclass
+class SnykConfig:
+    severity_threshold: str = "low"  # low | medium | high | critical
+
+
+@dataclass
 class TriageConfig:
     output_dir: Path
     context_lines: int
@@ -54,6 +59,7 @@ class TriageConfig:
     qualifying_cwes: frozenset[str]
     semgrep: SemgrepConfig
     veracode: VeracodeConfig
+    snyk: SnykConfig
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +138,12 @@ def load_config(
         scan_workers=int(vc_raw.get("scan_workers", 1)),
     )
 
+    # --- snyk ---
+    sn_raw: dict[str, Any] = raw.get("snyk", {})
+    snyk = SnykConfig(
+        severity_threshold=str(sn_raw.get("severity_threshold", "low")),
+    )
+
     return TriageConfig(
         output_dir=output_dir,
         context_lines=context_lines,
@@ -139,4 +151,5 @@ def load_config(
         qualifying_cwes=qualifying_cwes,
         semgrep=semgrep,
         veracode=veracode,
+        snyk=snyk,
     )

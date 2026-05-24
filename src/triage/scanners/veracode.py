@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +136,13 @@ def scan(
         RuntimeError: If packaging produces no packages, or if every scan
             invocation fails.
     """
+    if not shutil.which("veracode"):
+        raise RuntimeError(
+            "veracode is not installed or not on PATH.\n"
+            "Install the Veracode CLI from https://docs.veracode.com/r/c_about_veracode_cli\n"
+            "and set VERACODE_API_ID and VERACODE_API_KEY environment variables."
+        )
+
     repo_name = local_path.name
     pkg_dir = sast_dir / cfg.package_dir_name
     pkg_dir.mkdir(parents=True, exist_ok=True)

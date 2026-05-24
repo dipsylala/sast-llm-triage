@@ -218,6 +218,15 @@ class TestSemgrepScan:
 
         assert len(result.findings) == 1
 
+    def test_missing_binary_raises_with_install_hint(self, tmp_path: Path):
+        repo = tmp_path / "my-repo"
+        repo.mkdir()
+        cfg = self._make_cfg()
+
+        with patch("triage.scanners.semgrep.shutil.which", return_value=None):
+            with pytest.raises(RuntimeError, match="semgrep is not installed"):
+                scan(repo, cfg)
+
     def test_scan_failure_with_no_json_raises(self, tmp_path: Path):
         repo = tmp_path / "my-repo"
         repo.mkdir()

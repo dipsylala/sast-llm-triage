@@ -1,8 +1,8 @@
 # sast-llm-triage
 
-A CLI tool that scans a Git repository with **Veracode** or **Semgrep**, enriches
-and scores the findings, and writes a structured `combined_results.json` ready for
-LLM-assisted exploitability triage via an IDE agent.
+A CLI tool that scans a Git repository with **Veracode**, **Semgrep**, or **Snyk Code**,
+enriches and scores the findings, and writes a structured `combined_results.json` ready
+for LLM-assisted exploitability triage via an IDE agent.
 
 ---
 
@@ -16,6 +16,9 @@ uv sync
 
 # Scan with Semgrep (runs entirely locally, no credentials required)
 uv run sast-llm-triage --repo https://github.com/your-org/your-repo --scanner semgrep
+
+# Scan with Snyk Code (requires Snyk CLI + snyk auth)
+uv run sast-llm-triage --repo https://github.com/your-org/your-repo --scanner snyk
 
 # Scan with Veracode (requires Veracode CLI and API keys)
 uv run sast-llm-triage --repo https://github.com/your-org/your-repo --scanner veracode
@@ -32,9 +35,9 @@ writes `triage_report.json`.
 
 ### CLI options
 
-```
+```bash
 sast-llm-triage --repo <url-or-local-path>
-            --scanner veracode|semgrep
+            --scanner veracode|semgrep|snyk
             [--output-dir <dir>]          # default: ./output
             [--config <config.yaml>]      # default: config/config.yaml
             [--qualifying-cwes 22,78,89]  # overrides config default
@@ -46,12 +49,13 @@ nothing is cloned.
 
 ### Output layout
 
-```
+```bash
 output/
   <repo_name>/
     .sast-results/
       .veracode/             ← Veracode packages + raw scan JSON (veracode only)
       .semgrep/              ← raw Semgrep JSON output (semgrep only)
+      .snyk/                 ← raw Snyk SARIF JSON output (snyk only)
       raw_findings.json      ← all findings before CWE filtering
       combined_results.json  ← filtered, scored, enriched — LLM agent input
     triage_report.json       ← written by the LLM agent after triage
@@ -62,6 +66,7 @@ output/
 | Engine | How it runs | Credentials |
 |--------|-------------|-------------|
 | Semgrep | Entirely local — source code never leaves the machine | None required for OSS; run `semgrep login` before enabling `semgrep.pro: true` in config |
+| Snyk Code | Source tree sent to Snyk cloud analysis API | Install Snyk CLI ([docs](https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli)), then run `snyk auth` once |
 | Veracode | Packages locally; analysis runs in Veracode Pipeline Scan cloud API | Veracode API keys required |
 
 ### Configuration

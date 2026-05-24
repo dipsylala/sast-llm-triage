@@ -55,3 +55,6 @@ semgrep:
 veracode:
   package_dir_name: ".veracode"
   scan_workers: 1
+
+snyk:
+  severity_threshold: "low"   # low | medium | high | critical

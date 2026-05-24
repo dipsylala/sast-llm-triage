@@ -14,12 +14,16 @@ unusually difficult conditions, or a false positive.  Write the results to
 **Before doing anything else**, check whether
 `<output_dir>/<repo_name>/.sast-results/combined_results.json` exists.
 
-- **If it exists**: Read only this file.  It is your complete findings input —
-  it already contains the filtered, sorted, capped findings with source
-  excerpts attached.  Skip directly to the [Assessment process](#assessment-process).
-  The source-file read rule defined there applies throughout.
+- **If it exists**: Use this file as your sole findings input.  It already
+  contains the filtered, sorted, capped findings with source excerpts attached.
+  Skip directly to the [Assessment process](#assessment-process).
+  The source-file read rule defined there governs all repository source-file
+  reads during analysis; it does not prevent reading source files, it only
+  restricts when to do so.
 - **If it does not exist**: The `sast-llm-triage` tool has not been run yet, or
   something went wrong.  Stop and inform the user — do not proceed.
+- **If it exists but is not valid JSON**: Stop and inform the user:
+  `combined_results.json exists but is not valid JSON — cannot proceed.`
 
 ---
 
@@ -75,6 +79,10 @@ Coverage intent:
 
 If the task context provides extra CWE IDs, include them.
 
+If `combined_results.json` contains a finding whose `cwe_id` is not in the
+active scope, include it in the triage report but prepend the following to its
+`reasoning`: `NOTE: cwe_id <X> is outside the active triage scope.`
+
 ---
 
 ## Finding schema (relevant fields)
@@ -125,7 +133,8 @@ The file contains:
 - Per finding: `issue_id`, `scan_file`, `scan_engine`, `cwe_id`, `issue_type`,
   `severity`, `file`, `line`, `source_excerpt`, `score`, and optionally
 - `source_excerpt` — the sink line marked with `>>>` plus ±8 lines of context.
-  **This is your primary sink read.**
+  **This is your primary sink read.**  When copying this field to the output
+  report, trim it to the 4 lines nearest the flagged line.
 - `stack_dumps` — when present, a list of data-flow paths; each path has
   `source`, `steps[]`, and `sink`; each node has `file` (repo-relative path),
   `line` (1-based), and `snippet` (expression text).  Veracode findings may
@@ -134,12 +143,16 @@ The file contains:
   majority) produce no trace and will not have this field.
 
 If `combined_results.json` exists but parses as valid JSON with an empty
-`findings` array, write `[]` to `triage_report.json` and print the status
-line.
+`findings` array, write `[]` to `triage_report.json` and respond with:
+`[<repo_name>] done — 0 finding(s) assessed, written to <path>`.
 
 If two entries share identical `issue_id` and `scan_file`, triage both
 independently and annotate each `reasoning` field:
 `NOTE: Duplicate issue_id+scan_file pair — assessed independently.`
+
+Entries with the same `issue_id` but different `scan_file` values are findings
+from different scan engines; treat them as entirely independent with no
+annotation required.
 
 **Source-file read rule (canonical):** Only call `read_file` on a repository
 source file when the ±8-line `source_excerpt` does not reveal (a) the taint
@@ -156,19 +169,26 @@ Only call `read_file` on the actual source file if you need context beyond the
 - What operation is being performed (eval, query, exec, redirect, etc.)
 - What variable is tainted at the sink
 
+If `line` is 0, null, or absent and no `source_excerpt` is available, assign
+`needs_review` for that finding with `reasoning` noting the missing line
+information, and continue to the next finding.
+
 ### 2. Trace the data flow
 
-If `stack_dumps` is present (either scanner), iterate `stack_dumps[]` — each
-element is one complete source → sink path.  Within a path, walk `source` →
-`steps[]` → `sink` in order.  When multiple paths are present (Veracode
-findings), assess each one; use the most direct / highest-confidence path to
+If `stack_dumps` is present and non-empty (either scanner), iterate
+`stack_dumps[]` — each element is one complete source → sink path.  Within a
+path, walk `source` → `steps[]` → `sink` in order.  When multiple paths are
+present (Veracode findings), assess each one; use the path with the fewest
+unresolvable steps (most snippets non-empty and files within the repo root) to
 inform the verdict.  For each step, use `file` and `line` to read the source
-file if the `snippet` alone is insufficient to establish the taint path.  If
-`stack_dumps` is absent, infer the taint path from `source_excerpt`,
-`issue_type`, and `display_text`.
+file only if neither the step's `snippet` nor the existing `source_excerpt`
+already reveals the taint path for that step.  If `stack_dumps` is absent or
+is an empty array, infer the taint path from `source_excerpt`, `issue_type`,
+and `display_text`.
 
 If a step `file` resolves outside the repository root, do not read that
-external file.  Apply Step 2a before assigning a verdict.
+external file.  Proceed to Step 2a regardless of whether external files were
+encountered.
 
 Answer:
 - Where does the tainted value originate? (HTTP input, file, database, config, constant)
@@ -222,7 +242,8 @@ Unless the task context specifies otherwise, the **relevant threat actor** is
 an unauthenticated external HTTP attacker.
 
 **Before applying the tree:** If the source file is unreadable (missing, binary,
-or minified with no unminified counterpart), assign `needs_review` and stop.
+or minified with no unminified counterpart), assign `needs_review` for that
+finding and continue to the next.
 
 | Verdict | Meaning |
 | --- | --- |
@@ -233,24 +254,31 @@ or minified with no unminified counterpart), assign `needs_review` and stop.
 | `mitigated_by_design` | Taint originates exclusively from outside the attack surface, OR effective sanitization is present that the threat actor cannot bypass. |
 | `false_positive` | The flagged line is absent, the scanner misidentified the file/line, or the CWE class is inapplicable to this specific usage. |
 
+**Attack surface definition:** The attack surface consists of inputs a user
+can supply directly — HTTP request parameters, headers, cookies, form fields,
+file uploads, CLI arguments, and interactive dialog inputs.  Config files,
+environment variables, operator-managed database rows, and trusted internal
+service responses are *outside* the attack surface.
+
 **Decision tree** — apply in order; use the first match:
 
 1. Is the sink line present in available source and a real instance of the
    flagged operation class?  If not → `false_positive`.
 2. Does the tainted value originate *exclusively* from outside the attack
-   surface?  If yes → `mitigated_by_design`.
+   surface (config, env vars, operator DB rows, trusted internal responses)?
+   If yes → `mitigated_by_design`.
 3. Is effective sanitization present between source and sink?  If present and
    not bypassable → `mitigated_by_design`.  If present but bypassable only
    with significant effort → `unlikely_exploitable`.
-3b. Are there structural constraints making exploitation unlikely in practice
+4. Are there structural constraints making exploitation unlikely in practice
    (admin auth required, endpoint not internet-exposed, dead code path)?
    If yes → `unlikely_exploitable`.
-4. Is the data flow opaque, or would tracing the path require reading more than
+5. Is the data flow opaque, or would tracing the path require reading more than
    2–3 additional source files beyond those already read?
    If yes → `needs_review`.
-5. Is the path reachable and unsanitized with remaining uncertainty (e.g. auth
+6. Is the path reachable and unsanitized with remaining uncertainty (e.g. auth
    required, partial context)?  If yes → `likely_exploitable`.
-6. Is attacker input reachable at the sink with no auth required, no
+7. Is attacker input reachable at the sink with no auth required, no
    sanitization, and the sink performs a directly high-impact operation?
    If yes → `exploitable`.
 
@@ -293,6 +321,7 @@ Write results to `<output_dir>/<repo_name>/triage_report.json`.  Structure:
 ]
 ```
 
-After writing the file, your entire chat response MUST be exactly one line:
+Your final message, sent only after successfully writing the file, must be
+exactly one line:
 `[<repo_name>] done — N finding(s) assessed, written to <path>`.
-Do not include any other text, summary, or markdown.
+Do not include any other text, summary, or markdown in this final message.

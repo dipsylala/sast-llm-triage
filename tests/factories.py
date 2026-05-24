@@ -105,3 +105,74 @@ VERACODE_FINDING_DICT: dict = {
     },
     "stack_dumps": None,
 }
+
+
+# ---------------------------------------------------------------------------
+# Representative raw Snyk SARIF result + matching rule dict
+# ---------------------------------------------------------------------------
+
+SNYK_RULE_DICT: dict = {
+    "id": "python/SQLInjection",
+    "shortDescription": {"text": "SQL Injection"},
+    "fullDescription": {"text": "Unsanitized input is passed to a SQL query."},
+    "properties": {
+        "tags": ["security"],
+        "categories": ["Security"],
+        "cwe": ["CWE-89"],
+        "precision": "very-high",
+    },
+}
+
+SNYK_RESULT_DICT: dict = {
+    "ruleId": "python/SQLInjection",
+    "ruleIndex": 0,
+    "level": "error",
+    "message": {"text": "SQL Injection: unsanitized input flows into cursor.execute."},
+    "locations": [
+        {
+            "physicalLocation": {
+                "artifactLocation": {"uri": "app/db.py", "uriBaseId": "%SRCROOT%"},
+                "region": {"startLine": 42, "endLine": 42, "startColumn": 5, "endColumn": 30},
+            }
+        }
+    ],
+    "properties": {"priorityScore": 850, "isAutofixable": False},
+    "codeFlows": [
+        {
+            "threadFlows": [
+                {
+                    "locations": [
+                        {
+                            "location": {
+                                "id": 0,
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": "app/db.py", "uriBaseId": "%SRCROOT%"},
+                                    "region": {"startLine": 10, "endLine": 10, "startColumn": 1, "endColumn": 30},
+                                },
+                            }
+                        },
+                        {
+                            "location": {
+                                "id": 1,
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": "app/db.py", "uriBaseId": "%SRCROOT%"},
+                                    "region": {"startLine": 42, "endLine": 42, "startColumn": 5, "endColumn": 30},
+                                },
+                            }
+                        },
+                    ]
+                }
+            ]
+        }
+    ],
+}
+
+# A minimal SARIF document (runs[0]) built from the above primitives.
+SNYK_SARIF_DOC: dict = {
+    "runs": [
+        {
+            "tool": {"driver": {"name": "SnykCode", "rules": [SNYK_RULE_DICT]}},
+            "results": [SNYK_RESULT_DICT],
+        }
+    ]
+}

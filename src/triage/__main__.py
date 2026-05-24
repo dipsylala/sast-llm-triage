@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from triage.config import load_config
 from triage.scanners import semgrep as semgrep_scanner
+from triage.scanners import snyk as snyk_scanner
 from triage.scanners import veracode as veracode_scanner
 from triage.stages.normalizer import normalize
 from triage.stages.repo_cloner import clone
@@ -22,8 +23,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sast-llm-triage",
         description=(
-            "Scan a Git repository with Veracode or Semgrep, enrich and score "
-            "the findings, and write combined_results.json for LLM triage."
+            "Scan a Git repository with Veracode, Semgrep, or Snyk, enrich and "
+            "score the findings, and write combined_results.json for LLM triage."
         ),
     )
     parser.add_argument(
@@ -34,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--scanner",
         required=True,
-        choices=["veracode", "semgrep"],
+        choices=["veracode", "semgrep", "snyk"],
         help="SAST engine to use.",
     )
     parser.add_argument(
@@ -127,8 +128,10 @@ def main() -> None:
     try:
         if args.scanner == "veracode":
             result = veracode_scanner.scan(local_path, sast_dir, cfg.veracode)
-        else:
+        elif args.scanner == "semgrep":
             result = semgrep_scanner.scan(local_path, cfg.semgrep, sast_dir)
+        else:
+            result = snyk_scanner.scan(local_path, cfg.snyk, sast_dir)
     except RuntimeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
