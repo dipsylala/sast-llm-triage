@@ -7,6 +7,7 @@ absolute local path to the source and the derived repository name.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -72,11 +73,8 @@ def clone(repo: str, output_dir: Path) -> tuple[Path, str]:
                 errors="replace",
             )
             if result.returncode != 0:
-                # Clean up empty destination on failure
-                try:
-                    dest.rmdir()
-                except OSError:
-                    pass
+                # Clean up the destination directory (may be partially populated)
+                shutil.rmtree(dest, ignore_errors=True)
                 raise RuntimeError(
                     f"git clone failed (exit {result.returncode}):\n"
                     f"{result.stderr.strip()}"

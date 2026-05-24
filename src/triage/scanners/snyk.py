@@ -45,9 +45,6 @@ _SEVERITY_MAP: dict[str, int] = {
 
 _CWE_RE = re.compile(r"CWE-(\d+)", re.IGNORECASE)
 
-# Snyk codeFlows can have dozens of SSA-intermediate nodes.  Cap intermediate
-# steps to keep combined_results.json manageable for the LLM agent.
-_MAX_FLOW_STEPS = 10
 
 
 def _extract_cwe(cwe_list: Any) -> str:
@@ -81,8 +78,7 @@ def _normalize_snyk_flow(code_flows: list[dict] | None) -> list[dict] | None:
     in practice — ``snippet`` will always be an empty string.  The file/line
     values are reliable and are the primary useful content.
 
-    Intermediate steps are capped at ``_MAX_FLOW_STEPS`` to keep
-    ``combined_results.json`` compact.
+    All intermediate steps are included.
     """
     if not code_flows:
         return None
@@ -103,8 +99,6 @@ def _normalize_snyk_flow(code_flows: list[dict] | None) -> list[dict] | None:
             if len(locations) < 2:
                 continue
             middle = locations[1:-1]
-            if len(middle) > _MAX_FLOW_STEPS:
-                middle = middle[:_MAX_FLOW_STEPS]
             paths.append({
                 "source": _loc_step(locations[0]),
                 "steps": [_loc_step(loc) for loc in middle],
@@ -145,11 +139,6 @@ def _parse_snyk_result(
     issue_type: str = rule.get("shortDescription", {}).get("text", rule_id)
     display_text: str = result.get("message", {}).get("text", "")
 
-    # Priority score from Snyk properties (0–1000) — store in issue_id for
-    # downstream scorer context; the scorer uses the common `score` field.
-    props: dict[str, Any] = result.get("properties", {})
-    priority_score: int = int(props.get("priorityScore", 0))
-
     issue_id = f"{rule_id}:{uri}:{line}"
 
     dataflow: list[dict] | None = _normalize_snyk_flow(result.get("codeFlows"))
@@ -165,8 +154,6 @@ def _parse_snyk_result(
         scan_engine="snyk",
         display_text=display_text,
         stack_dumps=dataflow,
-        # Stash the raw Snyk priority score so result_scorer can use it.
-        score=priority_score,
     )
 
 
@@ -207,13 +194,14 @@ def scan(local_path: Path, cfg: SnykConfig, sast_dir: Path | None = None) -> Sca
 
     # Snyk exits with 1 when findings are present — not an error.
     # Exit codes ≥ 2 indicate a genuine failure (e.g. auth error, bad path).
-    # capture_cmd reports ok=False for any non-zero exit; we accept code 1.
-    snyk_exit_not_auth_err = stdout.strip() and not (
+    # capture_cmd reports ok=False for any non-zero exit; we accept exit code 1
+    # when there is valid JSON output and no auth-error keywords.
+    has_valid_findings_output = bool(stdout.strip()) and not (
         "authentication" in (stdout + stderr).lower()
         or "not authenticated" in (stdout + stderr).lower()
     )
 
-    if not ok and not snyk_exit_not_auth_err:
+    if not ok and not has_valid_findings_output:
         hint = (
             "\n  Hint: run `snyk auth` to authenticate with Snyk before scanning."
             if "auth" in (stdout + stderr).lower()

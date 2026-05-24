@@ -24,6 +24,9 @@ class TestCweBaseScores:
     def test_buffer_overflow_121(self):
         assert self._score("121") == 10
 
+    def test_buffer_overflow_787(self):
+        assert self._score("787") == 10
+
     def test_double_free_415(self):
         assert self._score("415") == 9
 
@@ -38,6 +41,12 @@ class TestCweBaseScores:
 
     def test_path_traversal_22(self):
         assert self._score("22") == 8
+
+    def test_path_traversal_73(self):
+        assert self._score("73") == 8
+
+    def test_file_inclusion_98(self):
+        assert self._score("98") == 8
 
     def test_sql_injection_89(self):
         assert self._score("89") == 7

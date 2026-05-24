@@ -111,7 +111,7 @@ def load_config(
     # --- scan settings ---
     scan_cfg: dict[str, Any] = raw.get("scan", {})
     context_lines: int = int(scan_cfg.get("context_lines", 8))
-    max_findings: int = int(scan_cfg.get("max_findings", 60))
+    max_findings: int = int(scan_cfg.get("max_findings", 0))  # 0 = no cap
 
     if qualifying_cwes_override:
         qualifying_cwes = frozenset(

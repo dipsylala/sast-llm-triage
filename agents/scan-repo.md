@@ -125,10 +125,11 @@ The file was already loaded in the FIRST STEP.  Proceed directly using its
 
 The file contains:
 
-- `findings` — the qualifying findings already filtered, sorted by
-  severity desc / CWE asc, and capped at 60.
-- `total_qualifying` / `capped` — if `capped` is `true`, include
-  `"NOTE: Capped at 60 of <total_qualifying> total findings due to volume."`
+- `findings` — the qualifying findings already filtered and sorted by
+  severity desc / CWE asc.
+- `total_qualifying` / `capped` — if `capped` is `true` (only when
+  `max_findings` is explicitly configured), include
+  `"NOTE: Capped at <max> of <total_qualifying> total findings due to volume."`
   in the first entry's `reasoning`.
 - Per finding: `issue_id`, `scan_file`, `scan_engine`, `cwe_id`, `issue_type`,
   `severity`, `file`, `line`, `source_excerpt`, `score`, and optionally
@@ -191,6 +192,7 @@ external file.  Proceed to Step 2a regardless of whether external files were
 encountered.
 
 Answer:
+
 - Where does the tainted value originate? (HTTP input, file, database, config, constant)
 - Is it user-controllable from outside the application?
 - Does it pass through any sanitization, validation, or allow-listing?

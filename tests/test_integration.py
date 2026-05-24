@@ -12,8 +12,9 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from triage.config import SemgrepConfig, VeracodeConfig
+from triage.config import SemgrepConfig, SnykConfig, VeracodeConfig
 from triage.scanners import semgrep as semgrep_scanner
+from triage.scanners import snyk as snyk_scanner
 from triage.scanners import veracode as veracode_scanner
 from triage.stages.result_enricher import enrich
 from triage.stages.result_scorer import score
@@ -244,6 +245,128 @@ class TestVeracodePipeline:
         # The two paths differ in source line (entry point).
         source_lines = {p["source"]["line"] for p in stack_dumps}
         assert source_lines == {4, 5}
+
+    def test_finding_scored(self, mini_repo: Path, tmp_path: Path):
+        """CWE-89 base 7; app/db.py has no path boost → score == 7."""
+        _, findings = self._run_pipeline(mini_repo, tmp_path)
+        assert findings[0]["score"] == 7
+
+
+# ---------------------------------------------------------------------------
+# Snyk Code integration test
+# ---------------------------------------------------------------------------
+
+_SNYK_PIPELINE_SARIF: dict = {
+    "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+    "version": "2.1.0",
+    "runs": [
+        {
+            "tool": {
+                "driver": {
+                    "name": "SnykCode",
+                    "rules": [
+                        {
+                            "id": "python/SqlInjection",
+                            "shortDescription": {"text": "SQL Injection"},
+                            "help": {"markdown": "Unsanitized input in SQL query.", "text": ""},
+                            "properties": {
+                                "tags": ["security"],
+                                "cwe": ["CWE-89: Improper Neutralization of Special Elements"],
+                            },
+                        }
+                    ],
+                }
+            },
+            "results": [
+                {
+                    "ruleId": "python/SqlInjection",
+                    "ruleIndex": 0,
+                    "level": "error",
+                    "message": {"text": "SQL Injection: user input flows to cursor.execute."},
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {"uri": "app/db.py", "uriBaseId": "%SRCROOT%"},
+                                "region": {"startLine": 9, "endLine": 9, "startColumn": 5, "endColumn": 28},
+                            }
+                        }
+                    ],
+                    "properties": {"priorityScore": 850, "isAutofixable": False},
+                    "codeFlows": [
+                        {
+                            "threadFlows": [
+                                {
+                                    "locations": [
+                                        {
+                                            "location": {
+                                                "id": 0,
+                                                "physicalLocation": {
+                                                    "artifactLocation": {"uri": "routes/api.py", "uriBaseId": "%SRCROOT%"},
+                                                    "region": {"startLine": 4},
+                                                },
+                                            }
+                                        },
+                                        {
+                                            "location": {
+                                                "id": 1,
+                                                "physicalLocation": {
+                                                    "artifactLocation": {"uri": "app/db.py", "uriBaseId": "%SRCROOT%"},
+                                                    "region": {"startLine": 9},
+                                                },
+                                            }
+                                        },
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ],
+        }
+    ],
+}
+
+
+class TestSnykPipeline:
+    """Full scan → enrich → score → normalize pipeline for Snyk Code."""
+
+    def _cfg(self) -> SnykConfig:
+        return SnykConfig()
+
+    def _run_pipeline(
+        self, mini_repo: Path, tmp_path: Path
+    ) -> tuple[Path, list[dict]]:
+        sarif_json = json.dumps(_SNYK_PIPELINE_SARIF)
+        with (
+            patch("shutil.which", return_value="/usr/bin/snyk"),
+            patch(
+                "triage.scanners.snyk.capture_cmd",
+                return_value=(True, sarif_json, ""),
+            ),
+        ):
+            scan_result = snyk_scanner.scan(mini_repo, self._cfg())
+
+        enrich(scan_result.findings, mini_repo)
+        score(scan_result.findings)
+        out_dir = tmp_path / "output"
+        out_path = normalize(scan_result, _QUALIFYING_CWES, _MAX_FINDINGS, out_dir)
+        findings = json.loads(out_path.read_text())["findings"]
+        return out_path, findings
+
+    def test_finding_count(self, mini_repo: Path, tmp_path: Path):
+        """One SQL injection finding expected."""
+        _, findings = self._run_pipeline(mini_repo, tmp_path)
+        assert len(findings) == 1
+
+    def test_finding_cwe(self, mini_repo: Path, tmp_path: Path):
+        """CWE-89 parsed from SARIF rule properties."""
+        _, findings = self._run_pipeline(mini_repo, tmp_path)
+        assert findings[0]["cwe_id"] == "89"
+
+    def test_finding_source_excerpt(self, mini_repo: Path, tmp_path: Path):
+        """Enricher should populate source_excerpt from app/db.py line 9."""
+        _, findings = self._run_pipeline(mini_repo, tmp_path)
+        assert "cursor.execute" in findings[0]["source_excerpt"]
 
     def test_finding_scored(self, mini_repo: Path, tmp_path: Path):
         """CWE-89 base 7; app/db.py has no path boost → score == 7."""

@@ -1,11 +1,10 @@
 """Stage 4 — Normalizer.
 
-Filters findings to the qualifying CWE set, sorts, applies the findings cap,
-and writes two output files:
+Filters findings to the qualifying CWE set, sorts, and writes two output files:
 
 - ``<sast_dir>/raw_findings.json``     — all pre-filter findings
-- ``<sast_dir>/combined_results.json`` — filtered, sorted, capped, ready for
-  the LLM triage agent
+- ``<sast_dir>/combined_results.json`` — filtered, sorted, ready for
+  the LLM triage agent (optionally capped via ``max_findings`` config)
 """
 
 from __future__ import annotations
@@ -69,9 +68,9 @@ def normalize(
     # --- Sort ---
     qualifying.sort(key=_sort_key)
 
-    # --- Cap ---
-    capped = total_qualifying > max_findings
-    to_write = qualifying[:max_findings]
+    # --- Cap (max_findings == 0 means no cap) ---
+    capped = bool(max_findings) and total_qualifying > max_findings
+    to_write = qualifying[:max_findings] if max_findings else qualifying
 
     # --- Build combined findings dicts ---
     combined: list[dict] = []  # type: ignore[type-arg]

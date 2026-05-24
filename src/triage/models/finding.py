@@ -17,11 +17,12 @@ class Finding:
     # --- identity ---
     issue_id: str
     """Unique ID within this scan.  Veracode: numeric string.
-    Semgrep: ``<check_id>:<path>:<line>``."""
+    Semgrep: ``<check_id>:<path>:<line>``.
+    Snyk: ``<rule_id>:<uri>:<line>``."""
 
     scan_file: str
     """Source filename that produced this finding.
-    Veracode: the filtered JSON filename.  Semgrep: ``"semgrep"``."""
+    Veracode: the filtered JSON filename.  Semgrep/Snyk: the scanner name string."""
 
     cwe_id: str
     """CWE number as a plain string, e.g. ``"89"``.  Empty string when
@@ -39,7 +40,7 @@ class Finding:
 
     # --- metadata ---
     scan_engine: str
-    """``"veracode"`` or ``"semgrep"``."""
+    """``"veracode"``, ``"semgrep"``, or ``"snyk"``."""
 
     severity: int = 0
     """0–5 severity scale (Veracode convention: 4 = High, 5 = Very High).
@@ -74,7 +75,8 @@ class Finding:
 
     Only present when the scanner resolved at least one complete source → sink
     path.  Semgrep always produces exactly one path; Veracode may produce
-    several (one per distinct call chain reaching the same sink).
+    several (one per distinct call chain reaching the same sink); Snyk produces
+    one path per ``codeFlow`` entry.
     """
 
     def to_dict(self) -> dict[str, Any]:

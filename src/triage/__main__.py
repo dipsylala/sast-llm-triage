@@ -14,7 +14,7 @@ from triage.scanners import semgrep as semgrep_scanner
 from triage.scanners import snyk as snyk_scanner
 from triage.scanners import veracode as veracode_scanner
 from triage.stages.normalizer import normalize
-from triage.stages.repo_cloner import clone
+from triage.stages.repo_cloner import _is_url, clone
 from triage.stages.result_enricher import enrich
 from triage.stages.result_scorer import score
 
@@ -71,7 +71,7 @@ def _print_triage_instructions(
     qualifying_count: int,
     total_raw: int,
 ) -> None:
-    line = "─" * 60
+    line = "-" * 60
     print(f"\n{line}")
     print("LLM triage ready.\n")
     print(f"  repo_name   : {repo_name}")
@@ -118,7 +118,6 @@ def main() -> None:
         sys.exit(1)
 
     # URL is available when the input looked like a remote URL; otherwise None.
-    from triage.stages.repo_cloner import _is_url  # noqa: PLC0415
     repo_url: str | None = args.repo if _is_url(args.repo) else None
 
     sast_dir = cfg.output_dir / repo_name / ".sast-results"
@@ -164,7 +163,7 @@ def main() -> None:
         repo_name=repo_name,
         output_dir=cfg.output_dir / repo_name,
         combined_path=combined_path,
-        qualifying_count=min(qualifying_count, cfg.max_findings),
+        qualifying_count=min(qualifying_count, cfg.max_findings) if cfg.max_findings else qualifying_count,
         total_raw=result.total_raw,
     )
 

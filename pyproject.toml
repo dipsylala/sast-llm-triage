@@ -11,16 +11,10 @@ requires-python = ">=3.11"
 dependencies = [
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
-    "semgrep",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.4",
-    "pytest-cov>=4.1",
-    "mypy>=1.7",
-    "ruff>=0.1",
-]
+semgrep = ["semgrep"]
 
 [project.scripts]
 sast-llm-triage = "triage.__main__:main"
@@ -58,4 +52,6 @@ select = ["E", "F", "I", "UP", "ANN"]
 dev = [
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
+    "mypy>=1.7",
+    "ruff>=0.1",
 ]

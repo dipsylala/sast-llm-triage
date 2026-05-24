@@ -97,7 +97,7 @@ sast-llm-triage --repo <url-or-local-path> \
 
 ### 6.2 Semgrep
 
-- Installed as a Python project dependency via `uv sync` (PyPI: `semgrep`).
+- Installed as an optional Python dependency: `uv sync --extra semgrep` (PyPI: `semgrep`).
 - Engine runs **entirely locally** — source code is never uploaded.
 - Always uses `--config auto` (pulls latest rules from Semgrep registry;
   semgrep's own cache handles repeated runs).
@@ -261,7 +261,7 @@ score = cwe_base_score + path_boost
 {
   "repo": "<repo_name>",
   "repo_url": "<url-or-null>",
-  "scan_engine": "veracode|semgrep",
+  "scan_engine": "veracode|semgrep|snyk",
   "total_qualifying": 42,
   "assessed_count": 42,
   "capped": false,

@@ -165,12 +165,9 @@ class TestScanFilteredJson:
         filtered_path = pkg_dir / f"filtered_{fake_pkg.stem}.json"
         filtered_path.write_text(json.dumps(filtered_data), encoding="utf-8")
 
-        with (
-            patch("triage.scanners.veracode.run_cmd", return_value=(True, "")) as mock_run,
-        ):
-            # _package should not be called (pkg_dir already has files)
-            # We patch run_cmd to avoid calling the real veracode CLI
-            # and pre-create the filtered output before scan_package is called.
+        with patch("triage.scanners.veracode.run_cmd", return_value=(True, "")) as mock_run:
+            # run_cmd is mocked so the real veracode CLI is never called;
+            # filtered JSON was pre-created above to simulate CLI output.
             result = scan(repo, sast_dir, cfg)
 
         assert result.scan_engine == "veracode"

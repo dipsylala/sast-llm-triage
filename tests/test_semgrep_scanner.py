@@ -282,6 +282,23 @@ class TestSemgrepScan:
         assert "--pro" not in call_args_list[1]
         assert len(result.findings) == 1
 
+    def test_raw_output_saved_when_sast_dir_provided(self, tmp_path: Path):
+        repo = tmp_path / "my-repo"
+        repo.mkdir()
+        sast_dir = tmp_path / ".sast-results"
+        cfg = self._make_cfg()
+        semgrep_output = json.dumps({"results": [SEMGREP_RESULT_DICT], "errors": []})
+
+        with patch(
+            "triage.scanners.semgrep.capture_cmd",
+            return_value=(True, semgrep_output, ""),
+        ):
+            scan(repo, cfg, sast_dir)
+
+        saved = sast_dir / ".semgrep" / "raw_semgrep_output.json"
+        assert saved.exists()
+        assert json.loads(saved.read_text())["results"][0]["check_id"] == SEMGREP_RESULT_DICT["check_id"]
+
     def test_pro_flag_absent_when_not_configured(self, tmp_path: Path):
         repo = tmp_path / "my-repo"
         repo.mkdir()

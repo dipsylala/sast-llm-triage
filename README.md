@@ -78,5 +78,8 @@ for credentials are loaded from a `.env` file if present (never committed).
 ### Running tests
 
 ```bash
-uv run pytest
+# Install dev dependencies plus the semgrep optional extra (needed for semgrep scanner tests)
+uv sync --extra semgrep
+
+uv run python -m pytest
 ```

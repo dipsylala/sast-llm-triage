@@ -67,12 +67,34 @@ def _normalize_semgrep_trace(trace: dict | None) -> list[dict] | None:
     if not trace:
         return None
 
-    def _node_step(node: dict) -> dict:
-        loc = node.get("location", {})
+    def _extract_loc_content(node: dict | list) -> tuple[dict, str]:
+        """Recursively unwrap semgrep's tagged-tuple or plain-dict node.
+
+        Semgrep emits nodes in two forms:
+        - Plain dict:   {"location": {...}, "content": "..."}  (intermediate_vars)
+        - Tagged tuple: ["CliLoc",  [loc_obj, content_str]]
+                        ["CliCall", [callee, steps, ["CliLoc", [...]]]]
+        """
+        if isinstance(node, dict):
+            return node.get("location", {}), str(node.get("content", ""))
+        if isinstance(node, list) and len(node) == 2:
+            tag, payload = node[0], node[1]
+            if tag == "CliLoc" and isinstance(payload, list) and len(payload) >= 2:
+                loc = payload[0] if isinstance(payload[0], dict) else {}
+                return loc, str(payload[1])
+            if tag == "CliCall" and isinstance(payload, list):
+                # Last element is the concrete sink/source CliLoc
+                for item in reversed(payload):
+                    if isinstance(item, list) and item and item[0] == "CliLoc":
+                        return _extract_loc_content(item)
+        return {}, ""
+
+    def _node_step(node: dict | list) -> dict:
+        loc, content = _extract_loc_content(node)
         return {
             "file": str(loc.get("path", "")),
             "line": int(loc.get("start", {}).get("line", 0)),
-            "snippet": str(node.get("content", "")),
+            "snippet": content,
         }
 
     taint_source = trace.get("taint_source")

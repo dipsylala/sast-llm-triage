@@ -12,6 +12,7 @@ any test file without relying on pytest's path magic.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from triage.models import Finding, ScanResult
 
@@ -27,7 +28,7 @@ def make_finding(**overrides) -> Finding:
     Pass keyword args to override any field, e.g.:
         make_finding(cwe_id="78", severity=5)
     """
-    defaults: dict = dict(
+    defaults: dict[str, Any] = dict(
         issue_id="1",
         scan_file="semgrep",
         cwe_id="89",

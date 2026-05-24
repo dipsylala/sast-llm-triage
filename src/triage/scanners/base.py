@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import subprocess
 from pathlib import Path
 
@@ -20,8 +21,6 @@ def run_cmd(
     without prior validation — callers are responsible for sanitising any
     path or string arguments before passing them here.
     """
-    import datetime
-
     cmd_str = " ".join(cmd)
     print(f"  $ {cmd_str}")
 
@@ -67,8 +66,7 @@ def run_cmd(
         returncode = -1
     finally:
         if log_fh is not None:
-            import datetime as _dt
-            finished = _dt.datetime.now().isoformat(timespec="seconds")
+            finished = datetime.datetime.now().isoformat(timespec="seconds")
             log_fh.write("#" + "-" * 78 + "\n")
             log_fh.write(f"# Finished: {finished}\n")
             log_fh.write(f"# Exit    : {returncode}\n")

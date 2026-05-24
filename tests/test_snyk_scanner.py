@@ -187,10 +187,10 @@ class TestNormalizeSnykFlow:
         assert paths[0]["steps"][0]["line"] == 20
         assert paths[0]["steps"][0]["snippet"] == ""  # Snyk provides no message text
 
-    def test_steps_capped_at_max(self):
-        from triage.scanners.snyk import _MAX_FLOW_STEPS
-        paths = _normalize_snyk_flow(self._make_flow(n_steps=_MAX_FLOW_STEPS + 5))
-        assert len(paths[0]["steps"]) == _MAX_FLOW_STEPS
+    def test_all_steps_returned(self):
+        n = 15
+        paths = _normalize_snyk_flow(self._make_flow(n_steps=n))
+        assert len(paths[0]["steps"]) == n
 
     def test_none_returns_none(self):
         assert _normalize_snyk_flow(None) is None
