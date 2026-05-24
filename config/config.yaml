@@ -1,0 +1,57 @@
+output:
+  dir: "./output"
+
+scan:
+  context_lines: 8      # source lines of context either side of the finding line
+  max_findings: 60      # cap applied before writing combined_results.json
+  qualifying_cwes:
+    - "22"
+    - "73"
+    - "77"
+    - "78"
+    - "79"
+    - "80"
+    - "88"
+    - "89"
+    - "94"
+    - "95"
+    - "98"
+    - "118"
+    - "120"
+    - "121"
+    - "125"
+    - "129"
+    - "134"
+    - "135"
+    - "170"
+    - "190"
+    - "191"
+    - "192"
+    - "193"
+    - "195"
+    - "196"
+    - "197"
+    - "209"
+    - "242"
+    - "295"
+    - "319"
+    - "327"
+    - "367"
+    - "415"
+    - "416"
+    - "502"
+    - "601"
+    - "611"
+    - "676"
+    - "787"
+    - "823"
+    - "824"
+    - "918"
+
+semgrep:
+  config: "auto"    # always pulls latest rules; semgrep caches locally
+  pro: true        # set true and export SEMGREP_APP_TOKEN to enable Pro Engine
+
+veracode:
+  package_dir_name: ".veracode"
+  scan_workers: 1

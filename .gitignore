@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+uv.lock
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment / secrets
+.env
+
+# Scan output (cloned repos, SAST results, triage reports)
+output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude agent config
+.claude/
