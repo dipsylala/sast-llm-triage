@@ -91,3 +91,71 @@ class TestEnrich:
         f = make_finding(file="app/db.py", line=9999)
         enrich([f], fake_repo, context_lines=2)
         # excerpt may be empty or partial — just must not raise
+
+
+class TestEnrichStackDumps:
+    def test_empty_snippets_populated(self, fake_repo: Path):
+        f = make_finding(
+            file="app/db.py",
+            line=10,
+            stack_dumps=[
+                {
+                    "source": {"file": "app/db.py", "line": 6, "snippet": ""},
+                    "steps": [],
+                    "sink": {"file": "app/db.py", "line": 10, "snippet": ""},
+                }
+            ],
+        )
+        enrich([f], fake_repo, context_lines=2)
+        p = f.stack_dumps[0]
+        assert p["source"]["snippet"] != ""
+        assert p["sink"]["snippet"] != ""
+
+    def test_existing_snippets_not_overwritten(self, fake_repo: Path):
+        f = make_finding(
+            file="app/db.py",
+            line=10,
+            stack_dumps=[
+                {
+                    "source": {"file": "app/db.py", "line": 6, "snippet": "already set"},
+                    "steps": [],
+                    "sink": {"file": "app/db.py", "line": 10, "snippet": ""},
+                }
+            ],
+        )
+        enrich([f], fake_repo, context_lines=2)
+        assert f.stack_dumps[0]["source"]["snippet"] == "already set"
+
+    def test_unresolvable_file_leaves_snippet_unchanged(self, fake_repo: Path):
+        f = make_finding(
+            file="app/db.py",
+            line=10,
+            stack_dumps=[
+                {
+                    "source": {"file": "nonexistent.py", "line": 1, "snippet": ""},
+                    "steps": [],
+                    "sink": {"file": "app/db.py", "line": 10, "snippet": ""},
+                }
+            ],
+        )
+        enrich([f], fake_repo, context_lines=2)
+        assert f.stack_dumps[0]["source"]["snippet"] == ""
+
+    def test_none_stack_dumps_does_not_crash(self, fake_repo: Path):
+        f = make_finding(file="app/db.py", line=10, stack_dumps=None)
+        enrich([f], fake_repo, context_lines=2)  # must not raise
+
+    def test_steps_snippets_populated(self, fake_repo: Path):
+        f = make_finding(
+            file="app/db.py",
+            line=10,
+            stack_dumps=[
+                {
+                    "source": {"file": "app/db.py", "line": 3, "snippet": ""},
+                    "steps": [{"file": "app/db.py", "line": 6, "snippet": ""}],
+                    "sink": {"file": "app/db.py", "line": 10, "snippet": ""},
+                }
+            ],
+        )
+        enrich([f], fake_repo, context_lines=2)
+        assert f.stack_dumps[0]["steps"][0]["snippet"] != ""

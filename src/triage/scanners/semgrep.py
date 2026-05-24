@@ -109,12 +109,23 @@ def _normalize_semgrep_trace(trace: dict | None) -> list[dict] | None:
     }]
 
 
-def _parse_semgrep_result(result: dict[str, Any]) -> Finding:
+def _parse_semgrep_result(
+    result: dict[str, Any],
+    local_path: Path,
+) -> Finding:
     """Map one semgrep result dict to a :class:`Finding`."""
     check_id: str = str(result.get("check_id", ""))
     path: str = str(result.get("path", ""))
     start: dict[str, Any] = result.get("start", {})
     line: int = int(start.get("line", 0))
+
+    _p = Path(path)
+    if _p.is_absolute():
+        try:
+            path = _p.relative_to(local_path.resolve()).as_posix()
+        except ValueError:
+            pass  # outside repo root — leave as-is
+    path = path.replace("\\", "/")
 
     extra: dict[str, Any] = result.get("extra", {})
     metadata: dict[str, Any] = extra.get("metadata", {})
@@ -168,9 +179,15 @@ def scan(local_path: Path, cfg: SemgrepConfig, sast_dir: Path | None = None) -> 
 
     repo_name = local_path.name
 
-    cmd = ["semgrep", "--config", cfg.config, "--json", "--dataflow-traces"]
+    cmd = ["semgrep", "--config", cfg.config, "--json", "--dataflow-traces", "--quiet"]
     if cfg.pro:
         cmd.append("--pro")
+    if sast_dir is not None:
+        try:
+            exclude_rel = sast_dir.resolve().relative_to(local_path.resolve())
+            cmd.extend(["--exclude", str(exclude_rel)])
+        except ValueError:
+            pass  # sast_dir outside local_path — nothing to exclude
     cmd.append(str(local_path))
 
     print(f"\n[semgrep] Scanning {local_path} ...")
@@ -217,7 +234,7 @@ def scan(local_path: Path, cfg: SemgrepConfig, sast_dir: Path | None = None) -> 
         ) from exc
 
     raw_results: list[dict[str, Any]] = data.get("results", [])
-    findings = [_parse_semgrep_result(r) for r in raw_results]
+    findings = [_parse_semgrep_result(r, local_path) for r in raw_results]
 
     # Semgrep may return exit code 1 when findings are present (not an error).
     # Log any reported errors from the JSON payload but don't abort.

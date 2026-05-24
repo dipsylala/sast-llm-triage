@@ -38,7 +38,7 @@ class TestExtractCwe:
 
 class TestParseSemgrepResult:
     def test_basic_mapping(self):
-        f = _parse_semgrep_result(SEMGREP_RESULT_DICT)
+        f = _parse_semgrep_result(SEMGREP_RESULT_DICT, Path("."))
         assert f.cwe_id == "89"
         assert f.severity == 4  # ERROR → 4
         assert f.file == "app/db.py"
@@ -47,28 +47,28 @@ class TestParseSemgrepResult:
         assert f.scan_file == "semgrep"
 
     def test_issue_id_format(self):
-        f = _parse_semgrep_result(SEMGREP_RESULT_DICT)
+        f = _parse_semgrep_result(SEMGREP_RESULT_DICT, Path("."))
         check_id = SEMGREP_RESULT_DICT["check_id"]
         assert f.issue_id == f"{check_id}:app/db.py:42"
 
     def test_severity_critical(self):
         r = {**SEMGREP_RESULT_DICT, "extra": {**SEMGREP_RESULT_DICT["extra"], "severity": "CRITICAL"}}
-        f = _parse_semgrep_result(r)
+        f = _parse_semgrep_result(r, Path("."))
         assert f.severity == 5
 
     def test_severity_warning(self):
         r = {**SEMGREP_RESULT_DICT, "extra": {**SEMGREP_RESULT_DICT["extra"], "severity": "WARNING"}}
-        f = _parse_semgrep_result(r)
+        f = _parse_semgrep_result(r, Path("."))
         assert f.severity == 3
 
     def test_severity_info(self):
         r = {**SEMGREP_RESULT_DICT, "extra": {**SEMGREP_RESULT_DICT["extra"], "severity": "INFO"}}
-        f = _parse_semgrep_result(r)
+        f = _parse_semgrep_result(r, Path("."))
         assert f.severity == 1
 
     def test_unknown_severity_defaults_to_2(self):
         r = {**SEMGREP_RESULT_DICT, "extra": {**SEMGREP_RESULT_DICT["extra"], "severity": "MEDIUM"}}
-        f = _parse_semgrep_result(r)
+        f = _parse_semgrep_result(r, Path("."))
         assert f.severity == 2
 
     def test_no_cwe_metadata_returns_empty_cwe(self):
@@ -80,7 +80,7 @@ class TestParseSemgrepResult:
                 "metadata": {},
             },
         }
-        f = _parse_semgrep_result(r)
+        f = _parse_semgrep_result(r, Path("."))
         assert f.cwe_id == ""
 
     def test_dataflow_trace_stored_in_stack_dumps(self):
@@ -104,7 +104,7 @@ class TestParseSemgrepResult:
             **SEMGREP_RESULT_DICT,
             "extra": {**SEMGREP_RESULT_DICT["extra"], "dataflow_trace": trace},
         }
-        f = _parse_semgrep_result(r)
+        f = _parse_semgrep_result(r, Path("."))
         # normalized schema — list with one path
         assert f.stack_dumps[0]["source"]["snippet"] == "request.args.get('id')"
         assert f.stack_dumps[0]["source"]["file"] == "app/db.py"
@@ -115,7 +115,7 @@ class TestParseSemgrepResult:
         assert f.stack_dumps[0]["sink"]["line"] == 42
 
     def test_no_dataflow_trace_leaves_stack_dumps_none(self):
-        f = _parse_semgrep_result(SEMGREP_RESULT_DICT)
+        f = _parse_semgrep_result(SEMGREP_RESULT_DICT, Path("."))
         assert f.stack_dumps is None
 
 

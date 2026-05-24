@@ -64,7 +64,7 @@ class TestParseSnykResult:
         return _build_rule_index([SNYK_RULE_DICT])
 
     def test_basic_mapping(self):
-        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index())
+        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index(), Path("."))
         assert f.cwe_id == "89"
         assert f.severity == 5  # "error" → 5
         assert f.file == "app/db.py"  # %SRCROOT%/ prefix stripped
@@ -73,35 +73,35 @@ class TestParseSnykResult:
         assert f.scan_file == "snyk"
 
     def test_issue_id_format(self):
-        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index())
+        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index(), Path("."))
         assert f.issue_id == "python/SQLInjection:app/db.py:42"
 
     def test_issue_type_from_rule_short_description(self):
-        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index())
+        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index(), Path("."))
         assert f.issue_type == "SQL Injection"
 
     def test_display_text_from_message(self):
-        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index())
+        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index(), Path("."))
         assert "SQL Injection" in f.display_text
 
     def test_severity_warning(self):
         r = {**SNYK_RESULT_DICT, "level": "warning"}
-        f = _parse_snyk_result(r, self._rule_index())
+        f = _parse_snyk_result(r, self._rule_index(), Path("."))
         assert f.severity == 3
 
     def test_severity_note(self):
         r = {**SNYK_RESULT_DICT, "level": "note"}
-        f = _parse_snyk_result(r, self._rule_index())
+        f = _parse_snyk_result(r, self._rule_index(), Path("."))
         assert f.severity == 1
 
     def test_severity_none(self):
         r = {**SNYK_RESULT_DICT, "level": "none"}
-        f = _parse_snyk_result(r, self._rule_index())
+        f = _parse_snyk_result(r, self._rule_index(), Path("."))
         assert f.severity == 1
 
     def test_unknown_rule_id_returns_empty_cwe(self):
         r = {**SNYK_RESULT_DICT, "ruleId": "unknown/Rule"}
-        f = _parse_snyk_result(r, self._rule_index())
+        f = _parse_snyk_result(r, self._rule_index(), Path("."))
         assert f.cwe_id == ""
 
     def test_srcroot_prefix_stripped(self):
@@ -116,7 +116,7 @@ class TestParseSnykResult:
                 }
             ],
         }
-        f = _parse_snyk_result(r, self._rule_index())
+        f = _parse_snyk_result(r, self._rule_index(), Path("."))
         assert f.file == "src/app.py"
 
     def test_uri_without_srcroot_unchanged(self):
@@ -131,11 +131,11 @@ class TestParseSnykResult:
                 }
             ],
         }
-        f = _parse_snyk_result(r, self._rule_index())
+        f = _parse_snyk_result(r, self._rule_index(), Path("."))
         assert f.file == "app/views.py"
 
     def test_code_flows_stored_in_stack_dumps(self):
-        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index())
+        f = _parse_snyk_result(SNYK_RESULT_DICT, self._rule_index(), Path("."))
         assert f.stack_dumps is not None
         path = f.stack_dumps[0]
         assert path["source"]["line"] == 10
@@ -146,7 +146,7 @@ class TestParseSnykResult:
 
     def test_no_code_flows_leaves_stack_dumps_none(self):
         r = {**SNYK_RESULT_DICT, "codeFlows": []}
-        f = _parse_snyk_result(r, self._rule_index())
+        f = _parse_snyk_result(r, self._rule_index(), Path("."))
         assert f.stack_dumps is None
 
 
@@ -170,43 +170,43 @@ class TestNormalizeSnykFlow:
         return [{"threadFlows": [{"locations": [source] + step_locs + [sink]}]}]
 
     def test_source_mapped(self):
-        paths = _normalize_snyk_flow(self._make_flow())
+        paths = _normalize_snyk_flow(self._make_flow(), Path("."))
         assert paths[0]["source"] == {"file": "app/routes.py", "line": 5, "snippet": ""}
 
     def test_sink_mapped(self):
-        paths = _normalize_snyk_flow(self._make_flow())
+        paths = _normalize_snyk_flow(self._make_flow(), Path("."))
         assert paths[0]["sink"] == {"file": "app/db.py", "line": 42, "snippet": ""}
 
     def test_no_steps_returns_empty_list(self):
-        paths = _normalize_snyk_flow(self._make_flow(n_steps=0))
+        paths = _normalize_snyk_flow(self._make_flow(n_steps=0), Path("."))
         assert paths[0]["steps"] == []
 
     def test_intermediate_steps_mapped(self):
-        paths = _normalize_snyk_flow(self._make_flow(n_steps=2))
+        paths = _normalize_snyk_flow(self._make_flow(n_steps=2), Path("."))
         assert len(paths[0]["steps"]) == 2
         assert paths[0]["steps"][0]["line"] == 20
         assert paths[0]["steps"][0]["snippet"] == ""  # Snyk provides no message text
 
     def test_all_steps_returned(self):
         n = 15
-        paths = _normalize_snyk_flow(self._make_flow(n_steps=n))
+        paths = _normalize_snyk_flow(self._make_flow(n_steps=n), Path("."))
         assert len(paths[0]["steps"]) == n
 
     def test_none_returns_none(self):
-        assert _normalize_snyk_flow(None) is None
+        assert _normalize_snyk_flow(None, Path(".")) is None
 
     def test_empty_list_returns_none(self):
-        assert _normalize_snyk_flow([]) is None
+        assert _normalize_snyk_flow([], Path(".")) is None
 
     def test_thread_flow_with_fewer_than_two_locations_skipped(self):
         flows = [{"threadFlows": [{"locations": []}]}]
-        assert _normalize_snyk_flow(flows) is None
+        assert _normalize_snyk_flow(flows, Path(".")) is None
 
     def test_multiple_thread_flows_produce_multiple_paths(self):
         flow = self._make_flow()
         # Duplicate the threadFlow to simulate two paths
         flow[0]["threadFlows"].append(flow[0]["threadFlows"][0])
-        paths = _normalize_snyk_flow(flow)
+        paths = _normalize_snyk_flow(flow, Path("."))
         assert len(paths) == 2
 
 

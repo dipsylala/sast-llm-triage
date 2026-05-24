@@ -106,3 +106,58 @@ class TestNormalizeOutput:
         result = _make_result([])
         normalize(result, QUALIFYING, sast_dir=sast_dir)
         assert sast_dir.is_dir()
+
+
+class TestFindingsSummary:
+    def test_summary_written(self, tmp_path: Path):
+        result = _make_result([make_finding(cwe_id="89")])
+        normalize(result, QUALIFYING, sast_dir=tmp_path)
+        assert (tmp_path / "findings_summary.md").exists()
+
+    def test_summary_contains_table_header(self, tmp_path: Path):
+        result = _make_result([make_finding(cwe_id="89")])
+        normalize(result, QUALIFYING, sast_dir=tmp_path)
+        text = (tmp_path / "findings_summary.md").read_text(encoding="utf-8")
+        assert "| issue_id |" in text
+        assert "| -------- |" in text
+
+    def test_summary_contains_finding_row(self, tmp_path: Path):
+        f = make_finding(cwe_id="89", issue_id="42", severity=4)
+        result = _make_result([f])
+        normalize(result, QUALIFYING, sast_dir=tmp_path)
+        text = (tmp_path / "findings_summary.md").read_text(encoding="utf-8")
+        assert "42" in text
+        assert "89" in text
+
+    def test_summary_stack_dumps_flag(self, tmp_path: Path):
+        with_dumps = make_finding(
+            cwe_id="89", issue_id="1",
+            stack_dumps=[{"source": {}, "steps": [], "sink": {}}],
+        )
+        without_dumps = make_finding(cwe_id="78", issue_id="2", stack_dumps=None)
+        result = _make_result([with_dumps, without_dumps])
+        normalize(result, QUALIFYING, sast_dir=tmp_path)
+        text = (tmp_path / "findings_summary.md").read_text(encoding="utf-8")
+        assert "yes" in text
+        assert "no" in text
+
+    def test_summary_severity_and_cwe_counts(self, tmp_path: Path):
+        findings = [
+            make_finding(cwe_id="89", severity=4, issue_id="1"),
+            make_finding(cwe_id="89", severity=4, issue_id="2"),
+            make_finding(cwe_id="78", severity=3, issue_id="3"),
+        ]
+        result = _make_result(findings)
+        normalize(result, QUALIFYING, sast_dir=tmp_path)
+        text = (tmp_path / "findings_summary.md").read_text(encoding="utf-8")
+        assert "## Counts by severity" in text
+        assert "## Counts by CWE" in text
+        assert "4: 2" in text
+        assert "3: 1" in text
+        assert "CWE-78: 1" in text
+        assert "CWE-89: 2" in text
+
+    def test_summary_written_for_empty_findings(self, tmp_path: Path):
+        result = _make_result([])
+        normalize(result, QUALIFYING, sast_dir=tmp_path)
+        assert (tmp_path / "findings_summary.md").exists()

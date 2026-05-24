@@ -68,7 +68,7 @@ def _extract_cwe(cwe_list: Any) -> str:
     return ""
 
 
-def _normalize_snyk_flow(code_flows: list[dict] | None) -> list[dict] | None:
+def _normalize_snyk_flow(code_flows: list[dict] | None, local_path: Path) -> list[dict] | None:
     """Convert Snyk's SARIF ``codeFlows`` to the common dataflow trace schema.
 
     Snyk emits one ``codeFlow`` per finding, containing a single ``threadFlow``
@@ -87,6 +87,15 @@ def _normalize_snyk_flow(code_flows: list[dict] | None) -> list[dict] | None:
     def _loc_step(loc: dict) -> dict:
         phys = loc.get("location", {}).get("physicalLocation", {})
         uri = phys.get("artifactLocation", {}).get("uri", "")
+        if uri.startswith("%SRCROOT%/"):
+            uri = uri[len("%SRCROOT%/"):]
+        _u = Path(uri)
+        if _u.is_absolute():
+            try:
+                uri = _u.relative_to(local_path.resolve()).as_posix()
+            except ValueError:
+                pass
+        uri = uri.replace("\\", "/")
         region = phys.get("region", {})
         line = int(region.get("startLine", 0))
         # message.text is absent in real Snyk output; default to empty string.
@@ -117,6 +126,7 @@ def _build_rule_index(rules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 def _parse_snyk_result(
     result: dict[str, Any],
     rule_index: dict[str, dict[str, Any]],
+    local_path: Path,
 ) -> Finding:
     """Map one SARIF result dict to a :class:`Finding`."""
     rule_id: str = str(result.get("ruleId", ""))
@@ -130,6 +140,13 @@ def _parse_snyk_result(
     # Strip the %SRCROOT%/ prefix that Snyk sometimes prepends
     if uri.startswith("%SRCROOT%/"):
         uri = uri[len("%SRCROOT%/"):]
+    _p = Path(uri)
+    if _p.is_absolute():
+        try:
+            uri = _p.relative_to(local_path.resolve()).as_posix()
+        except ValueError:
+            pass  # outside repo root — leave as-is
+    uri = uri.replace("\\", "/")
     region = phys.get("region", {})
     line: int = int(region.get("startLine", 0))
 
@@ -142,7 +159,7 @@ def _parse_snyk_result(
 
     issue_id = f"{rule_id}:{uri}:{line}"
 
-    dataflow: list[dict] | None = _normalize_snyk_flow(result.get("codeFlows"))
+    dataflow: list[dict] | None = _normalize_snyk_flow(result.get("codeFlows"), local_path)
 
     return Finding(
         issue_id=issue_id,
@@ -188,6 +205,12 @@ def scan(local_path: Path, cfg: SnykConfig, sast_dir: Path | None = None) -> Sca
     cmd = ["snyk", "code", "test", "--json"]
     if cfg.severity_threshold:
         cmd += ["--severity-threshold", cfg.severity_threshold]
+    if sast_dir is not None:
+        try:
+            exclude_rel = sast_dir.resolve().relative_to(local_path.resolve())
+            cmd.append(f"--exclude={exclude_rel!s}")
+        except ValueError:
+            pass  # sast_dir outside local_path — nothing to exclude
     cmd.append(str(local_path))
 
     print(f"\n[snyk] Scanning {local_path} ...")
@@ -277,7 +300,7 @@ def scan(local_path: Path, cfg: SnykConfig, sast_dir: Path | None = None) -> Sca
     rule_index = _build_rule_index(rules)
 
     raw_results: list[dict[str, Any]] = run.get("results", [])
-    findings = [_parse_snyk_result(r, rule_index) for r in raw_results]
+    findings = [_parse_snyk_result(r, rule_index, local_path) for r in raw_results]
 
     logger.info("[snyk] %d findings parsed from %d SARIF results.", len(findings), len(raw_results))
 

@@ -25,6 +25,13 @@ unusually difficult conditions, or a false positive.  Write the results to
 - **If it exists but is not valid JSON**: Stop and inform the user:
   `triage_findings.json exists but is not valid JSON — cannot proceed.`
 
+After confirming the JSON is valid, also read
+`<output_dir>/<repo_name>/.sast-results/findings_summary.md` if it exists.
+It contains a compact Markdown table (issue_id, severity, CWE, file:line,
+stack_dumps presence) plus per-severity and per-CWE counts.  Use it to
+orient yourself before beginning the per-finding assessment.  Its absence
+does not block triage.
+
 ---
 
 ## Inputs

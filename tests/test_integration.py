@@ -16,6 +16,7 @@ from triage.config import SemgrepConfig, SnykConfig, VeracodeConfig
 from triage.scanners import semgrep as semgrep_scanner
 from triage.scanners import snyk as snyk_scanner
 from triage.scanners import veracode as veracode_scanner
+from factories import make_finding
 from triage.stages.result_enricher import enrich
 from triage.stages.normalizer import normalize
 
@@ -130,6 +131,28 @@ class TestSemgrepPipeline:
         assert p["sink"]["line"] == 9
 
     def test_dataflow_trace_populated(self, mini_repo: Path, tmp_path: Path):
+        """enrich() fills empty stack_dumps snippets from source files."""
+        finding = make_finding(
+            file="app/db.py",
+            line=9,
+            stack_dumps=[
+                {
+                    "source": {"file": "routes/api.py", "line": 4, "snippet": ""},
+                    "steps": [{"file": "app/db.py", "line": 7, "snippet": ""}],
+                    "sink": {"file": "app/db.py", "line": 9, "snippet": ""},
+                }
+            ],
+        )
+
+        enrich([finding], mini_repo, context_lines=2)
+
+        p = finding.stack_dumps[0]
+        assert p["source"]["snippet"] == "uid = request.args.get('id')"
+        assert p["steps"][0]["snippet"] == "query = 'SELECT * FROM users WHERE id=' + user_id"
+        assert p["sink"]["snippet"] == "cursor.execute(query)"
+
+
+def _veracode_filtered_json() -> dict:
     return {
         "findings": [{
             "issue_id": "2001",

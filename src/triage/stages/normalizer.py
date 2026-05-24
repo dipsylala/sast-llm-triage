@@ -1,10 +1,11 @@
 """Stage 4 — Normalizer.
 
-Filters findings to the qualifying CWE set, sorts, and writes two output files:
+Filters findings to the qualifying CWE set, sorts, and writes three output files:
 
-- ``<sast_dir>/raw_findings.json``     — all pre-filter findings
-- ``<sast_dir>/triage_findings.json`` — filtered, sorted, ready for
+- ``<sast_dir>/raw_findings.json``       — all pre-filter findings
+- ``<sast_dir>/triage_findings.json``   — filtered, sorted, ready for
   the LLM triage agent
+- ``<sast_dir>/findings_summary.md``    — Markdown index for agent orientation
 """
 
 from __future__ import annotations
@@ -89,4 +90,39 @@ def normalize(
         combined_out,
     )
 
+    _write_findings_summary(qualifying, sast_dir)
+
     return combined_out
+
+
+def _write_findings_summary(findings: list[Finding], sast_dir: Path) -> None:
+    """Write ``findings_summary.md`` — a Markdown index of qualifying findings."""
+    rows = [
+        "# Findings Summary",
+        "",
+        "| issue_id | sev | CWE | issue_type | file:line | stack_dumps? |",
+        "| -------- | --- | --- | ---------- | --------- | ------------ |",
+    ]
+    severity_counts: dict[int, int] = {}
+    cwe_counts: dict[str, int] = {}
+
+    for f in findings:
+        has_dumps = "yes" if f.stack_dumps else "no"
+        rows.append(
+            f"| {f.issue_id} | {f.severity} | {f.cwe_id} | {f.issue_type} "
+            f"| {f.file}:{f.line} | {has_dumps} |"
+        )
+        severity_counts[f.severity] = severity_counts.get(f.severity, 0) + 1
+        cwe_counts[f.cwe_id] = cwe_counts.get(f.cwe_id, 0) + 1
+
+    rows += ["", "## Counts by severity", ""]
+    for sev in sorted(severity_counts, reverse=True):
+        rows.append(f"- {sev}: {severity_counts[sev]}")
+
+    rows += ["", "## Counts by CWE", ""]
+    for cwe in sorted(cwe_counts, key=lambda c: (int(c) if c.isdigit() else 9999)):
+        rows.append(f"- CWE-{cwe}: {cwe_counts[cwe]}")
+
+    summary_out = sast_dir / "findings_summary.md"
+    summary_out.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    logger.debug("findings_summary written to %s", summary_out)

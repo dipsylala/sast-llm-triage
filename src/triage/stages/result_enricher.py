@@ -2,6 +2,9 @@
 
 Reads ±N source lines around each finding's reported line and populates
 ``Finding.source_excerpt``.  The sink line is marked with ``>>>``.
+
+Also fills empty ``snippet`` fields on ``stack_dumps`` nodes so the LLM
+agent does not need a separate ``read_file`` call per data-flow step.
 """
 
 from __future__ import annotations
@@ -117,4 +120,58 @@ def enrich(
             source_lines, finding.line, context_lines
         )
 
+    for finding in findings:
+        _enrich_stack_dumps(finding, local_path)
+
     return findings
+
+
+def _enrich_stack_dumps(finding: Finding, local_path: Path) -> None:
+    """Populate missing ``snippet`` values in every stack-dump node.
+
+    Uses the full repo-relative path in each node's ``file`` field to resolve
+    files unambiguously.  Nodes whose ``file`` does not resolve (bare filename,
+    path traversal, missing file) are left unchanged rather than guessing.
+    File contents are cached per path to avoid redundant reads across nodes
+    that share a file.
+    """
+    if not finding.stack_dumps:
+        return
+
+    file_cache: dict[str, list[str]] = {}
+
+    for path in finding.stack_dumps:
+        nodes = []
+        if "source" in path:
+            nodes.append(path["source"])
+        nodes.extend(path.get("steps", []))
+        if "sink" in path:
+            nodes.append(path["sink"])
+
+        for node in nodes:
+            if node.get("snippet"):
+                continue  # already populated
+
+            file_rel: str = node.get("file") or ""
+            line_num: int = node.get("line") or 0
+            if not file_rel or line_num < 1:
+                continue
+
+            if file_rel not in file_cache:
+                resolved = _safe_resolve(local_path, file_rel)
+                if resolved is None:
+                    file_cache[file_rel] = []  # unresolvable — skip all nodes from this file
+                    continue
+                try:
+                    file_cache[file_rel] = resolved.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).splitlines()
+                except OSError:
+                    file_cache[file_rel] = []
+                    continue
+
+            source_lines = file_cache[file_rel]
+            if not source_lines or line_num > len(source_lines):
+                continue
+
+            node["snippet"] = source_lines[line_num - 1].strip()
