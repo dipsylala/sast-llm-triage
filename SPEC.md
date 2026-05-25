@@ -399,7 +399,19 @@ Reads are capped at 300 lines per call.  The dispatcher resolves the path
 relative to `repo_root` and rejects any path that escapes the repo root
 (`Path.relative_to()` guard).
 
-### 13.4 Output
+### 13.4 No-tools fallback
+
+If the model returns an empty response when `tools` is supplied (common with
+Ollama-hosted models such as `qwen3:4b` that do not support the OpenAI
+tool-calling wire format), the overlay retries the call **without tools**.
+In that fallback the system prompt from `agents/triage-finding.md` is sent
+unchanged — including the `read_file` tool policy section — even though no
+tool is available.  This instruction/capability mismatch is a known limitation:
+a model that follows the tool-policy instructions literally may wait for a tool
+that never arrives.  A future improvement would strip the tool-policy section
+from the system prompt when operating in no-tools mode.
+
+### 13.5 Output
 
 Verdicts are collected into a list and written to
 `<sast_dir>/triage_report.json` — the same JSON array format produced by the

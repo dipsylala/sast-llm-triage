@@ -144,3 +144,10 @@ env var (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) before running.
 `triage_findings.json` is the handoff contract for both paths — the IDE agent
 and `--llm-overlay` read the same file.  `triage_report.json` format is
 identical regardless of which path produced it.
+
+**Known limitation — no-tools fallback:** Models that do not support the
+OpenAI tool-calling wire format (e.g. many Ollama-hosted models) receive an
+automatic retry without tools, with the source file pre-embedded in the
+prompt instead.  The system prompt still contains the `read_file` tool-policy
+section in that mode; a future improvement will strip those instructions when
+tool calling is unavailable.
