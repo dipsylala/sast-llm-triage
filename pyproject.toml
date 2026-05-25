@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 semgrep = ["semgrep"]
+llm-overlay = ["litellm>=1.0"]
 
 [project.scripts]
 sast-llm-triage = "triage.__main__:main"

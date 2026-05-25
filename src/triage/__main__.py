@@ -17,7 +17,6 @@ from triage.stages.normalizer import normalize
 from triage.stages.repo_cloner import _is_url, clone
 from triage.stages.result_enricher import enrich
 
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sast-llm-triage",
@@ -59,6 +58,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--verbose",
         action="store_true",
         help="Enable DEBUG-level logging.",
+    )
+    parser.add_argument(
+        "--llm-overlay",
+        action="store_true",
+        help=(
+            "After scanning, triage each qualifying finding via LiteLLM and write "
+            "triage_report.json.  Requires litellm (pip install litellm) and the "
+            "appropriate API key env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)."
+        ),
     )
     return parser
 
@@ -153,13 +161,28 @@ def main() -> None:
         1 for f in result.findings if f.cwe_id in cfg.qualifying_cwes
     )
 
-    _print_triage_instructions(
-        repo_name=repo_name,
-        output_dir=cfg.output_dir / repo_name,
-        combined_path=combined_path,
-        qualifying_count=qualifying_count,
-        total_raw=result.total_raw,
-    )
+    if args.llm_overlay:
+        # --- Step 5: LiteLLM triage overlay ---
+        from triage.stages.llm_overlay import run_llm_overlay
+
+        try:
+            run_llm_overlay(
+                sast_dir=sast_dir,
+                repo_root=local_path,
+                repo_name=repo_name,
+                overlay_cfg=cfg.llm_overlay,
+            )
+        except (FileNotFoundError, RuntimeError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        _print_triage_instructions(
+            repo_name=repo_name,
+            output_dir=cfg.output_dir / repo_name,
+            combined_path=combined_path,
+            qualifying_count=qualifying_count,
+            total_raw=result.total_raw,
+        )
 
 
 if __name__ == "__main__":

@@ -52,6 +52,12 @@ class SnykConfig:
 
 
 @dataclass
+class LlmOverlayConfig:
+    model: str = "openai/gpt-4o"
+    max_turns: int = 10
+
+
+@dataclass
 class TriageConfig:
     output_dir: Path
     context_lines: int
@@ -59,6 +65,7 @@ class TriageConfig:
     semgrep: SemgrepConfig
     veracode: VeracodeConfig
     snyk: SnykConfig
+    llm_overlay: LlmOverlayConfig = field(default_factory=LlmOverlayConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +149,13 @@ def load_config(
         severity_threshold=str(sn_raw.get("severity_threshold", "low")),
     )
 
+    # --- llm_overlay ---
+    lo_raw: dict[str, Any] = raw.get("llm_overlay", {})
+    llm_overlay = LlmOverlayConfig(
+        model=str(lo_raw.get("model", "openai/gpt-4o")),
+        max_turns=int(lo_raw.get("max_turns", 10)),
+    )
+
     return TriageConfig(
         output_dir=output_dir,
         context_lines=context_lines,
@@ -149,4 +163,5 @@ def load_config(
         semgrep=semgrep,
         veracode=veracode,
         snyk=snyk,
+        llm_overlay=llm_overlay,
     )

@@ -57,3 +57,15 @@ veracode:
 
 snyk:
   severity_threshold: "low"   # low | medium | high | critical
+
+llm_overlay:
+  # LiteLLM model string — provider is selected by the prefix.
+  # Examples:
+  #   openai/gpt-4o
+  #   anthropic/claude-opus-4-5
+  #   ollama/qwen3:4b
+  #   azure/gpt-4o  (set AZURE_API_KEY / AZURE_API_BASE in env)
+  #   ollama/qwen3:4b  (local Ollama, no API key needed)
+  model: "ollama/qwen3:4b"
+  # Maximum tool-call turns per finding before the verdict is forced to needs_review.
+  max_turns: 10

@@ -24,10 +24,17 @@ uv run sast-llm-triage --repo https://github.com/your-org/your-repo --scanner sn
 uv run sast-llm-triage --repo https://github.com/your-org/your-repo --scanner veracode
 ```
 
-Once the scan completes, open `agents/scan-repo.md` in your IDE agent (GitHub
-Copilot, Claude Code, etc.) and supply the `repo_name` and `output_dir` values
-printed at the end of the run.  The agent reads `triage_findings.json` and
-writes `triage_report.json`.
+Once the scan completes, either:
+
+- **Headless triage** — add `--llm-overlay` and set your API key; the tool
+  calls the LLM directly and writes `triage_report.json` without any IDE:
+  ```bash
+  OPENAI_API_KEY=sk-... uv run sast-llm-triage \
+    --repo https://github.com/your-org/your-repo --scanner snyk --llm-overlay
+  ```
+- **IDE triage** — open `agents/scan-repo.md` in your IDE agent (GitHub
+  Copilot, Claude Code, etc.) and supply the `repo_name` and `output_dir`
+  values printed at the end of the run.
 
 ---
 
@@ -41,6 +48,7 @@ sast-llm-triage --repo <url-or-local-path>
             [--output-dir <dir>]          # default: ./output
             [--config <config.yaml>]      # default: config/config.yaml
             [--qualifying-cwes 22,78,89]  # overrides config default
+            [--llm-overlay]               # triage via LiteLLM instead of IDE agent
             [--verbose]
 ```
 
@@ -86,45 +94,53 @@ uv run python -m pytest
 
 ---
 
-## Roadmap
+## LLM Overlay (`--llm-overlay`)
 
-### SDK-based triage (non-IDE execution)
-
-The triage step currently requires an IDE agent session (GitHub Copilot, Claude
-Code, etc.) because the orchestrator/worker pattern relies on IDE primitives.
-A future `--triage` flag would replace that manual step with direct API calls
-via **[LiteLLM](https://github.com/BerriAI/litellm)** — a single Python library
-that wraps both OpenAI and Anthropic (and many other providers) behind one
-uniform `completion()` interface. No per-provider SDK, no code duplication.
+Adding `--llm-overlay` replaces the manual IDE agent step with direct LLM API
+calls driven by **[LiteLLM](https://github.com/BerriAI/litellm)** — a single
+library that wraps OpenAI, Anthropic, and many other providers behind one
+uniform interface.
 
 ```bash
-uv run sast-llm-triage --repo <url> --scanner snyk --triage
+# Install the extra dependency
+pip install litellm
+
+# Full pipeline — scan + triage in one command
+OPENAI_API_KEY=sk-... uv run sast-llm-triage \
+  --repo https://github.com/your-org/your-repo --scanner snyk --llm-overlay
 ```
 
-Because each finding already arrives with `source_excerpt` and `stack_dumps`
-pre-packed by the enricher, most verdicts need only a single API call.
-For cases where the model needs to look beyond the enriched excerpt, a
-`read_file` tool can be exposed and the response handled in a short
-tool-call loop — all still within LiteLLM, without a separate agent framework:
+For each qualifying finding the tool runs a short tool-call loop: the model
+receives the finding (with `source_excerpt` and `stack_dumps` already
+attached) and may call `read_file` to inspect additional source files before
+returning a JSON verdict.  All file reads are sandboxed to the cloned repo
+root.
 
 ```python
 while True:
-    response = litellm.completion(model=model, messages=messages, tools=tools)
+    response = litellm.completion(model=model, messages=messages, tools=[READ_FILE_TOOL])
     msg = response.choices[0].message
-    if msg.tool_calls:          # model wants to read more code
+    if msg.tool_calls:          # model wants to read more source
         messages.append(msg)
         for tc in msg.tool_calls:
             messages.append({"role": "tool", "tool_call_id": tc.id,
-                             "content": read_file(tc, repo_root)})
+                             "content": read_file_sandboxed(tc, repo_root)})
     else:
         return msg.content      # final verdict JSON
 ```
 
-Key design points:
+Model and turn limit are set in `config.yaml` under `llm_overlay`:
 
-- `triage_findings.json` stays the handoff contract — same file the IDE agent reads today.
-- `triage_report.json` format is unchanged; only the producer changes.
-- Provider and model set via `config.yaml` / env vars (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`).
-- `agents/triage-finding.md` becomes the prompt template — no logic duplication.
-- `read_file` tool is sandboxed to the cloned repo root (path-traversal check).
-- One LiteLLM call (or short loop) per finding; cost and rate-limit handling needed.
+```yaml
+llm_overlay:
+  model: "openai/gpt-4o"     # prefix selects provider; LiteLLM routes automatically
+  max_turns: 10              # guard against runaway tool-call loops
+```
+
+Supported model string examples: `openai/gpt-4o`, `anthropic/claude-opus-4-5`,
+`azure/gpt-4o` (set `AZURE_API_KEY` / `AZURE_API_BASE`).  Set the matching
+env var (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) before running.
+
+`triage_findings.json` is the handoff contract for both paths — the IDE agent
+and `--llm-overlay` read the same file.  `triage_report.json` format is
+identical regardless of which path produced it.
