@@ -13,14 +13,13 @@ from __future__ import annotations
 import json
 import logging
 import re
-import shutil
 from pathlib import Path
 from typing import Any
 
 from triage.config import SemgrepConfig
 from triage.models import Finding, ScanResult
 
-from .base import capture_cmd
+from .base import _tool_available, capture_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +62,43 @@ def _normalize_semgrep_trace(trace: dict | None, local_path: Path) -> list[dict]
 
     Semgrep always produces a single path per finding; it is returned as a
     one-element list so the schema matches Veracode's multi-path format.
+
+    Raw Semgrep ``dataflow_trace`` shape:
+
+    .. code-block:: json
+
+        {
+          "taint_source": ["CliLoc", [{"path": "/abs/src/Foo.ts",
+                                        "start": {"line": 5}}, "req.body"]],
+          "intermediate_vars": [
+            {"location": {"path": "…", "start": {"line": 8}},
+             "content": "userId"}
+          ],
+          "taint_sink":   ["CliLoc", [{"path": "…", "start": {"line": 12}},
+                                       "query(userId)"]]
+        }
+
+    Nodes come in two forms:
+
+    - **Tagged tuple** ``["CliLoc", [loc_obj, content_str]]`` — used for
+      ``taint_source`` and ``taint_sink``.
+    - **Plain dict** ``{"location": loc_obj, "content": str}`` — used for
+      ``intermediate_vars``.
+    - ``["CliCall", [..., ["CliLoc", ...]]]`` — nested call; the inner
+      ``CliLoc`` is extracted recursively.
+
+    Field mapping:
+
+    ===============================  =======================
+    Raw key                          step field
+    ===============================  =======================
+    ``loc.path`` (made repo-relative) ``file``
+    ``loc.start.line``               ``line``
+    tag payload content str          ``snippet``
+    ===============================  =======================
+
+    Absolute paths are made repo-relative via
+    ``Path.relative_to(local_path.resolve())``.
     """
     if not trace:
         return None
@@ -121,7 +157,47 @@ def _parse_semgrep_result(
     result: dict[str, Any],
     local_path: Path,
 ) -> Finding:
-    """Map one semgrep result dict to a :class:`Finding`."""
+    """Map one entry from Semgrep's ``--json`` output to a :class:`Finding`.
+
+    Raw Semgrep result shape (one element of ``results[]"):
+
+    .. code-block:: json
+
+        {
+          "check_id": "javascript.lang.security.audit.sqli.knex-sqli",
+          "path": "/abs/path/src/db.ts",
+          "start": {"line": 42, "col": 5},
+          "extra": {
+            "severity": "ERROR",
+            "message": "Potential SQL injection …",
+            "metadata": {
+              "cwe": ["CWE-89: SQL Injection"]
+            },
+            "dataflow_trace": { ... }
+          }
+        }
+
+    Field mapping:
+
+    ============================  ================================
+    Raw key                       Finding field
+    ============================  ================================
+    ``check_id``                  ``issue_type``
+    ``check_id:path:line``        ``issue_id`` (synthetic key)
+    ``path`` (repo-relative)      ``file``
+    ``start.line``                ``line``
+    ``extra.severity``            ``severity`` (mapped via
+                                  :data:`_SEVERITY_MAP` to 0-5)
+    ``extra.message``             ``display_text``
+    ``extra.metadata.cwe[0]``     ``cwe_id`` (first CWE number
+                                  extracted by :func:`_extract_cwe`)
+    ``extra.dataflow_trace``      ``stack_dumps`` (normalised by
+                                  :func:`_normalize_semgrep_trace`)
+    ============================  ================================
+
+    Absolute ``path`` values are made repo-relative via
+    ``Path.relative_to(local_path.resolve())``.
+    """
     check_id: str = str(result.get("check_id", ""))
     path: str = str(result.get("path", ""))
     start: dict[str, Any] = result.get("start", {})
@@ -179,15 +255,17 @@ def scan(local_path: Path, cfg: SemgrepConfig, sast_dir: Path | None = None) -> 
         RuntimeError: If semgrep exits with a non-zero code or its output
             cannot be parsed as JSON.
     """
-    if not shutil.which("semgrep"):
+    _SEMGREP = ["uv", "run", "semgrep"]
+
+    if not _tool_available(["uv", "run", "semgrep", "show", "version"]):
         raise RuntimeError(
-            "semgrep is not installed or not on PATH.\n"
-            "Install it with: pip install semgrep"
+            "semgrep is not available.\n"
+            "Install it with: uv sync --extra semgrep"
         )
 
     repo_name = local_path.name
 
-    cmd = ["semgrep", "--config", cfg.config, "--json", "--dataflow-traces", "--quiet"]
+    cmd = _SEMGREP + ["--config", cfg.config, "--json", "--dataflow-traces", "--quiet"]
     if cfg.pro:
         cmd.append("--pro")
     if sast_dir is not None:

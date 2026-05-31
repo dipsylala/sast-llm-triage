@@ -7,6 +7,36 @@ import subprocess
 from pathlib import Path
 
 
+def _tool_available(cmd: str | list[str], shell: bool = False) -> bool:
+    """Return ``True`` if *cmd* exits with code 0.
+
+    Pass the full command to run — nothing is appended automatically.
+
+    Set ``shell=True`` for tools that ship as shell wrappers on Windows
+    (e.g. ``snyk.ps1``, ``snyk.cmd``) so the OS shell resolves the wrapper
+    rather than relying on ``CreateProcess`` finding the executable.
+    ``shutil.which`` returns ``None`` for these wrappers, which is why
+    subprocess invocation is used here instead.
+
+    Examples::
+
+        _tool_available(["veracode", "version"])
+        _tool_available(["snyk", "version"], shell=sys.platform == "win32")
+        _tool_available(["uv", "run", "semgrep", "show", "version"])
+    """
+    full_cmd = [cmd] if isinstance(cmd, str) else list(cmd)
+    try:
+        result = subprocess.run(
+            full_cmd,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            shell=shell,
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
 def run_cmd(
     cmd: list[str],
     cwd: Path,

@@ -186,6 +186,11 @@ class TestSemgrepScan:
     def _make_cfg(self, pro: bool = False) -> SemgrepConfig:
         return SemgrepConfig(config="auto", pro=pro)
 
+    @pytest.fixture(autouse=True)
+    def _semgrep_on_path(self):
+        """Pretend semgrep is available so _tool_available doesn't block tests."""
+        with patch("triage.scanners.semgrep._tool_available", return_value=True):
+            yield
     def test_successful_scan_returns_findings(self, tmp_path: Path):
         repo = tmp_path / "my-repo"
         repo.mkdir()
@@ -228,8 +233,8 @@ class TestSemgrepScan:
         repo.mkdir()
         cfg = self._make_cfg()
 
-        with patch("triage.scanners.semgrep.shutil.which", return_value=None):
-            with pytest.raises(RuntimeError, match="semgrep is not installed"):
+        with patch("triage.scanners.semgrep._tool_available", return_value=False):
+            with pytest.raises(RuntimeError, match="semgrep is not available"):
                 scan(repo, cfg)
 
     def test_scan_failure_with_no_json_raises(self, tmp_path: Path):

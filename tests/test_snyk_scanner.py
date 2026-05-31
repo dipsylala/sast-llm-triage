@@ -216,8 +216,8 @@ class TestSnykScan:
 
     @pytest.fixture(autouse=True)
     def _snyk_installed(self):
-        """Mock shutil.which so tests don't depend on snyk being on PATH."""
-        with patch("triage.scanners.snyk.shutil.which", return_value="/usr/bin/snyk"):
+        """Mock _tool_available so tests don't depend on snyk being on PATH."""
+        with patch("triage.scanners.snyk._tool_available", return_value=True):
             yield
 
     def test_successful_scan_returns_findings(self, tmp_path: Path):
@@ -277,7 +277,7 @@ class TestSnykScan:
         repo = tmp_path / "my-repo"
         repo.mkdir()
 
-        with patch("triage.scanners.snyk.shutil.which", return_value=None):
+        with patch("triage.scanners.snyk._tool_available", return_value=False):
             with pytest.raises(RuntimeError, match="snyk is not installed"):
                 scan(repo, self._cfg())
 

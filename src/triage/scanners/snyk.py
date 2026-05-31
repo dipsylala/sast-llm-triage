@@ -31,7 +31,7 @@ from typing import Any
 from triage.config import SnykConfig
 from triage.models import Finding, ScanResult
 
-from .base import capture_cmd
+from .base import _tool_available, capture_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -72,13 +72,51 @@ def _normalize_snyk_flow(code_flows: list[dict] | None, local_path: Path) -> lis
 
     Snyk emits one ``codeFlow`` per finding, containing a single ``threadFlow``
     whose ``locations`` list represents the full taint path in source-to-sink
-    order (index 0 = source, last index = sink).
+    order (index 0 = source, last index = sink).  All intermediate steps are
+    included.
 
-    Snyk does NOT include a ``message.text`` field on individual trace locations
-    in practice — ``snippet`` will always be an empty string.  The file/line
-    values are reliable and are the primary useful content.
+    Raw SARIF ``codeFlows`` shape:
 
-    All intermediate steps are included.
+    .. code-block:: json
+
+        [
+          {
+            "threadFlows": [
+              {
+                "locations": [
+                  {
+                    "location": {
+                      "physicalLocation": {
+                        "artifactLocation": {"uri": "%SRCROOT%/src/Foo.ts"},
+                        "region": {"startLine": 5}
+                      },
+                      "message": {"text": ""}
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+
+    Field mapping:
+
+    =============================================  ===========
+    Raw key                                        step field
+    =============================================  ===========
+    ``location.physicalLocation``
+      ``.artifactLocation.uri``                    ``file``
+      (``.region.startLine``)                      ``line``
+    ``location.message.text``                      ``snippet``
+    =============================================  ===========
+
+    URI handling:
+
+    - ``%SRCROOT%/`` prefix is stripped before storing.
+    - Absolute URIs are made repo-relative via
+      ``Path.relative_to(local_path.resolve())``.
+    - ``snippet`` is always ``""`` in real Snyk output; ``result_enricher``
+      fills it from source.
     """
     if not code_flows:
         return None
@@ -127,7 +165,64 @@ def _parse_snyk_result(
     rule_index: dict[str, dict[str, Any]],
     local_path: Path,
 ) -> Finding:
-    """Map one SARIF result dict to a :class:`Finding`."""
+    """Map one SARIF result from ``snyk code test --json`` to a :class:`Finding`.
+
+    Snyk outputs a SARIF 2.1.0 document.  The top-level structure is::
+
+        runs[0].results[]     ← one entry per finding  (parsed here)
+        runs[0].tool.driver.rules[]  ← rule metadata (pre-indexed by caller)
+
+    Raw SARIF result shape:
+
+    .. code-block:: json
+
+        {
+          "ruleId": "javascript/SqlInjection",
+          "level": "error",
+          "message": {"text": "Unsanitized input … into SQL query"},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "%SRCROOT%/src/db.ts"},
+                "region": {"startLine": 42}
+              }
+            }
+          ],
+          "codeFlows": [ ... ]
+        }
+
+    Rule metadata looked up from ``rules[]`` by ``ruleId``:
+
+    .. code-block:: json
+
+        {
+          "id": "javascript/SqlInjection",
+          "shortDescription": {"text": "SQL Injection"},
+          "properties": {"cwe": ["CWE-89"]}
+        }
+
+    Field mapping:
+
+    =============================================  ================================
+    Raw key                                        Finding field
+    =============================================  ================================
+    ``ruleId``                                     ``issue_type`` (via rule lookup)
+    ``ruleId:uri:line``                            ``issue_id`` (synthetic key)
+    ``locations[0].physicalLocation``
+      ``.artifactLocation.uri`` (repo-relative)    ``file``
+      ``.region.startLine``                        ``line``
+    ``level``                                      ``severity`` (mapped via
+                                                   :data:`_SEVERITY_MAP` to 0-5)
+    ``message.text``                               ``display_text``
+    ``rule.properties.cwe[0]``                     ``cwe_id`` (first CWE number
+                                                   extracted by :func:`_extract_cwe`)
+    ``codeFlows``                                  ``stack_dumps`` (normalised by
+                                                   :func:`_normalize_snyk_flow`)
+    =============================================  ================================
+
+    URI handling: ``%SRCROOT%/`` prefix is stripped; absolute URIs are made
+    repo-relative via ``Path.relative_to(local_path.resolve())``.
+    """
     rule_id: str = str(result.get("ruleId", ""))
     level: str = str(result.get("level", "warning")).lower()
     severity: int = _SEVERITY_MAP.get(level, 2)
@@ -199,6 +294,14 @@ def scan(local_path: Path, cfg: SnykConfig, sast_dir: Path | None = None) -> Sca
             f"Must be one of: {', '.join(sorted(_VALID_THRESHOLDS))}"
         )
 
+    _shell = sys.platform == "win32"
+    if not _tool_available(["snyk", "version"], shell=_shell):
+        raise RuntimeError(
+            "snyk is not installed or not on PATH.\n"
+            "Install the Snyk CLI and run `snyk auth`:\n"
+            "  https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli"
+        )
+
     repo_name = local_path.name
 
     cmd = ["snyk", "code", "test", "--json"]
@@ -218,7 +321,7 @@ def scan(local_path: Path, cfg: SnykConfig, sast_dir: Path | None = None) -> Sca
     # On Windows, snyk is typically a .cmd or .ps1 wrapper that CreateProcess
     # cannot execute directly.  shell=True delegates resolution to cmd.exe,
     # which handles these wrappers exactly as an interactive shell would.
-    ok, stdout, stderr = capture_cmd(cmd, cwd=local_path, shell=sys.platform == "win32")
+    ok, stdout, stderr = capture_cmd(cmd, cwd=local_path, shell=_shell)
 
     # Snyk exits with 1 when findings are present — not an error.
     # Exit codes ≥ 2 indicate a genuine failure (e.g. auth error, bad path).

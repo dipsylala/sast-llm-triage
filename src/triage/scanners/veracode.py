@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -20,7 +19,7 @@ from typing import Any
 from triage.config import VeracodeConfig
 from triage.models import Finding, ScanResult
 
-from .base import run_cmd
+from .base import _tool_available, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +27,34 @@ logger = logging.getLogger(__name__)
 def _normalize_veracode_trace(raw_stack_dumps: dict | None) -> list[dict] | None:
     """Convert Veracode's raw stack_dumps to the common dataflow trace schema.
 
-    Veracode stores frames in call-stack order (sink at index 0, source last)
-    and may provide multiple independent paths per finding (one per
-    ``stack_dump`` entry).  This function reverses each frame list so every
-    path is returned in source → sink order.
+    Raw Veracode shape (from ``filtered_<name>.json``):
+
+    .. code-block:: json
+
+        {
+          "stack_dumps": {
+            "stack_dump": [
+              {
+                "Frame": [
+                  {"SourceFile": "src/Foo.java", "SourceLine": 10,
+                   "VarNames": ["cmd"], "FunctionName": "exec"},
+                  ...
+                ]
+              }
+            ]
+          }
+        }
+
+    Mapping:
+
+    - ``stack_dumps.stack_dump`` → one path per list entry.
+    - ``Frame`` list is in call-stack order (sink first, source last).
+      It is **reversed** here so every path is emitted source → sink.
+    - ``Frame[n].SourceFile``  → ``step.file``
+    - ``Frame[n].SourceLine``  → ``step.line``
+    - ``snippet`` is always set to ``""``; ``result_enricher`` fills it
+      from the actual source file so bytecode variable names (``VarNames``)
+      are not surfaced to the LLM.
     """
     if not raw_stack_dumps:
         return None
@@ -63,7 +86,41 @@ def _normalize_veracode_trace(raw_stack_dumps: dict | None) -> list[dict] | None
 
 
 def _parse_veracode_finding(raw: dict[str, Any], scan_file: str) -> Finding:
-    """Map one Veracode finding dict to a :class:`Finding`."""
+    """Map one entry from a Veracode ``filtered_<name>.json`` to a :class:`Finding`.
+
+    Raw Veracode finding shape:
+
+    .. code-block:: json
+
+        {
+          "issue_id": 1030,
+          "cwe_id": "78",
+          "issue_type": "Improper Neutralization …",
+          "severity": 5,
+          "display_text": "<span>…</span>",
+          "files": {
+            "source_file": {"file": "src/index.ts", "line": 42}
+          },
+          "stack_dumps": { ... }
+        }
+
+    Field mapping:
+
+    ========================  ================================
+    Raw key                   Finding field
+    ========================  ================================
+    ``issue_id``              ``issue_id`` (str)
+    ``cwe_id``                ``cwe_id``
+    ``issue_type``            ``issue_type``
+    ``severity``              ``severity`` (0-5 Veracode scale)
+    ``display_text``          ``display_text`` (HTML, stripped
+                              by the LLM overlay prompt)
+    ``files.source_file.file``  ``file``
+    ``files.source_file.line``  ``line``
+    ``stack_dumps``           ``stack_dumps`` (normalised by
+                              :func:`_normalize_veracode_trace`)
+    ========================  ================================
+    """
     src = raw.get("files", {}).get("source_file", {})
     return Finding(
         issue_id=str(raw.get("issue_id", "")),
@@ -134,7 +191,7 @@ def scan(
         RuntimeError: If packaging produces no packages, or if every scan
             invocation fails.
     """
-    if not shutil.which("veracode"):
+    if not _tool_available(["veracode", "version"]):
         raise RuntimeError(
             "veracode is not installed or not on PATH.\n"
             "Install the Veracode CLI from https://docs.veracode.com/r/c_about_veracode_cli\n"

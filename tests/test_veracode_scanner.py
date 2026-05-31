@@ -181,7 +181,7 @@ class TestScanFilteredJson:
         sast_dir = tmp_path / ".sast-results"
         cfg = self._make_cfg()
 
-        with patch("triage.scanners.veracode.shutil.which", return_value=None):
+        with patch("triage.scanners.veracode._tool_available", return_value=False):
             with pytest.raises(RuntimeError, match="veracode is not installed"):
                 scan(repo, sast_dir, cfg)
 
