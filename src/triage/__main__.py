@@ -68,6 +68,23 @@ def _build_parser() -> argparse.ArgumentParser:
             "appropriate API key env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)."
         ),
     )
+    parser.add_argument(
+        "--skip-scan",
+        action="store_true",
+        help=(
+            "Skip cloning and scanning; use the existing triage_findings.json in "
+            "<output-dir>/<repo-name>/.sast-results/.  Requires --repo to be a "
+            "local path so the repo name and root can be resolved."
+        ),
+    )
+    parser.add_argument(
+        "--log",
+        action="store_true",
+        help=(
+            "Write full LLM chat transcripts to llm_chat.jsonl in the "
+            ".sast-results directory.  Only relevant with --llm-overlay."
+        ),
+    )
     return parser
 
 
@@ -76,14 +93,19 @@ def _print_triage_instructions(
     output_dir: Path,
     combined_path: Path,
     qualifying_count: int,
-    total_raw: int,
+    total_raw: int | None,
 ) -> None:
     line = "-" * 60
     print(f"\n{line}")
     print("LLM triage ready.\n")
     print(f"  repo_name   : {repo_name}")
     print(f"  output_dir  : {output_dir.resolve()}")
-    print(f"  findings    : {qualifying_count} qualifying / {total_raw} total")
+    findings_label = (
+        f"{qualifying_count} qualifying / {total_raw} total"
+        if total_raw is not None
+        else f"{qualifying_count} qualifying"
+    )
+    print(f"  findings    : {findings_label}")
     print(f"  input file  : {combined_path}")
     print()
     print(
@@ -130,36 +152,55 @@ def main() -> None:
     sast_dir = cfg.output_dir / repo_name / ".sast-results"
     sast_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Step 2: Run SAST scanner ---
-    try:
-        if args.scanner == "veracode":
-            result = veracode_scanner.scan(local_path, sast_dir, cfg.veracode)
-        elif args.scanner == "semgrep":
-            result = semgrep_scanner.scan(local_path, cfg.semgrep, sast_dir)
-        else:
-            result = snyk_scanner.scan(local_path, cfg.snyk, sast_dir)
-    except RuntimeError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(1)
+    total_raw: int | None = None
 
-    result.repo_url = repo_url
+    if args.skip_scan:
+        # --- Skip-scan path: use existing triage_findings.json ---
+        findings_path = sast_dir / "triage_findings.json"
+        if not findings_path.is_file():
+            print(
+                f"ERROR: --skip-scan requires an existing triage_findings.json at "
+                f"{findings_path}. Run without --skip-scan first.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        import json as _json
+        data = _json.loads(findings_path.read_text(encoding="utf-8"))
+        qualifying_count = len(data.get("findings", []))
+        combined_path = findings_path
+        print(f"[skip-scan] Using existing {findings_path} ({qualifying_count} findings)")
+    else:
+        # --- Step 2: Run SAST scanner ---
+        try:
+            if args.scanner == "veracode":
+                result = veracode_scanner.scan(local_path, sast_dir, cfg.veracode)
+            elif args.scanner == "semgrep":
+                result = semgrep_scanner.scan(local_path, cfg.semgrep, sast_dir)
+            else:
+                result = snyk_scanner.scan(local_path, cfg.snyk, sast_dir)
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
-    # --- Step 3: Enrich findings with source context ---
-    print(f"\n[enrich] Reading source context (±{cfg.context_lines} lines) ...")
-    enrich(result.findings, local_path, cfg.context_lines)
+        result.repo_url = repo_url
 
-    # --- Step 4: Normalise and write output files ---
-    print("[normalise] Writing output files ...")
-    combined_path = normalize(
-        result,
-        cfg.qualifying_cwes,
-        sast_dir,
-        repo_url=repo_url,
-    )
+        # --- Step 3: Enrich findings with source context ---
+        print(f"\n[enrich] Reading source context (±{cfg.context_lines} lines) ...")
+        enrich(result.findings, local_path, cfg.context_lines)
 
-    qualifying_count = sum(
-        1 for f in result.findings if f.cwe_id in cfg.qualifying_cwes
-    )
+        # --- Step 4: Normalise and write output files ---
+        print("[normalise] Writing output files ...")
+        combined_path = normalize(
+            result,
+            cfg.qualifying_cwes,
+            sast_dir,
+            repo_url=repo_url,
+        )
+
+        qualifying_count = sum(
+            1 for f in result.findings if f.cwe_id in cfg.qualifying_cwes
+        )
+        total_raw = result.total_raw
 
     if args.llm_overlay:
         # --- Step 5: LiteLLM triage overlay ---
@@ -171,6 +212,7 @@ def main() -> None:
                 repo_root=local_path,
                 repo_name=repo_name,
                 overlay_cfg=cfg.llm_overlay,
+                chat_log=args.log,
             )
         except (FileNotFoundError, RuntimeError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
@@ -181,7 +223,7 @@ def main() -> None:
             output_dir=cfg.output_dir / repo_name,
             combined_path=combined_path,
             qualifying_count=qualifying_count,
-            total_raw=result.total_raw,
+            total_raw=total_raw,
         )
 
 

@@ -15,7 +15,6 @@ scan:
     - "94"
     - "95"
     - "98"
-    - "118"
     - "120"
     - "121"
     - "125"
@@ -25,26 +24,26 @@ scan:
     - "170"
     - "190"
     - "191"
-    - "192"
     - "193"
-    - "195"
-    - "196"
-    - "197"
-    - "209"
     - "242"
     - "295"
     - "319"
     - "327"
+    - "352"
     - "367"
     - "415"
     - "416"
+    - "434"
+    - "476"
     - "502"
+    - "532"
     - "601"
     - "611"
-    - "676"
     - "787"
+    - "798"
     - "823"
     - "824"
+    - "862"
     - "918"
 
 semgrep:
@@ -66,6 +65,6 @@ llm_overlay:
   #   ollama/qwen3:4b
   #   azure/gpt-4o  (set AZURE_API_KEY / AZURE_API_BASE in env)
   #   ollama/qwen3:4b  (local Ollama, no API key needed)
-  model: "ollama/qwen3:4b"
+  model: "ollama/qcwind/qwen3-8b-instruct-Q4-K-M"
   # Maximum tool-call turns per finding before the verdict is forced to needs_review.
   max_turns: 10

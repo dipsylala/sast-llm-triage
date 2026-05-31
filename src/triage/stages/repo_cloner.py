@@ -84,7 +84,7 @@ def clone(repo: str, output_dir: Path) -> tuple[Path, str]:
         return dest.resolve(), repo_name
 
     # Local path
-    local = Path(repo)
+    local = Path(repo).resolve()
     if not local.exists():
         raise ValueError(f"Local path does not exist: {local}")
     if not local.is_dir():

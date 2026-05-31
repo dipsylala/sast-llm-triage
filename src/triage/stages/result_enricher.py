@@ -47,20 +47,34 @@ def _safe_resolve(local_path: Path, file_rel: str) -> Path | None:
         return None
 
     if not resolved.is_file():
-        # Veracode sometimes prefixes paths with an extra top-level segment
-        # (the package name).  Try stripping the first component.
-        parts = Path(normalised).parts
-        if len(parts) > 1:
-            alt = (local_path / Path(*parts[1:])).resolve()
-            try:
-                alt.relative_to(local_path.resolve())
-            except ValueError:
-                return None
-            if alt.is_file():
-                return alt
+        # Direct path not found — search the whole repo tree for a file whose
+        # path ends with the reported relative path (handles Maven/Gradle repos
+        # where Veracode reports Java package paths like
+        # "com/example/Foo.java" but the file lives under
+        # "app/src/main/java/com/example/Foo.java").
+        root = local_path.resolve()
+        try:
+            matches = [
+                m for m in root.rglob(normalised)
+                if m.is_file() and _within(m, root)
+            ]
+        except OSError:
+            matches = []
+        if len(matches) == 1:
+            return matches[0]
+        # Multiple matches — ambiguous; fall back to None
         return None
 
     return resolved
+
+
+def _within(path: Path, root: Path) -> bool:
+    """Return True if *path* is strictly inside *root*."""
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
 
 
 def _build_excerpt(lines: list[str], sink_line: int, context: int) -> str:

@@ -118,7 +118,32 @@ def _safe_read_file(
         return f"ERROR: '{path}' is outside the repository root — access denied."
 
     if not candidate.is_file():
-        return f"ERROR: File not found: {path}"
+        # Direct path not found — search the whole repo tree for a matching
+        # suffix (handles Maven/Gradle repos where Veracode reports Java
+        # package paths like "com/example/Foo.java" but the file lives under
+        # "app/src/main/java/com/example/Foo.java").
+        root = repo_root.resolve()
+        try:
+            matches = [
+                m for m in root.rglob(str(p))
+                if m.is_file()
+            ]
+            # Keep only matches that stay within repo_root
+            safe = []
+            for m in matches:
+                try:
+                    m.relative_to(root)
+                    safe.append(m)
+                except ValueError:
+                    pass
+        except OSError:
+            safe = []
+        if len(safe) == 1:
+            candidate = safe[0]
+        elif len(safe) > 1:
+            return f"ERROR: Ambiguous path '{path}' — matches {len(safe)} files. Provide a more specific path."
+        else:
+            return f"ERROR: File not found: {path}"
 
     try:
         raw_lines = candidate.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -150,6 +175,7 @@ def _triage_one(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
     ]
+    _no_tools_msgs: list[dict] | None = None  # set when the no-tools fallback is used
 
     for turn in range(max_turns):
         log.debug("    turn %d/%d", turn + 1, max_turns)
@@ -168,23 +194,17 @@ def _triage_one(
                 finding, repo_name,
                 f"API error during triage: {type(exc).__name__}",
                 str(exc)[:500],
-            )
+            ), messages
         msg = response.choices[0].message
 
         # Detect models that return empty content when tools are passed (e.g. Ollama/qwen3).
         # Fall back to a single no-tools call with the source file pre-embedded.
         if not msg.tool_calls and not (msg.content or "").strip():
             log.debug("    empty response — model may not support tools; retrying without tools")
-            file_path = finding.get("file", "")
-            finding_line = finding.get("line", 1) or 1
-            start = max(1, finding_line - 25)
-            end = finding_line + 25
-            file_content = _safe_read_file(repo_root, file_path, start, end)
             no_tools_content = (
                 f"repo_name: {repo_name}\n"
                 f"repo_root: {repo_root}\n\n"
-                f"Finding:\n{json.dumps(finding, indent=2)}\n\n"
-                f"Source file context ({file_path}, lines {start}-{end}):\n{file_content}"
+                f"Finding:\n{json.dumps(finding, indent=2)}"
             )
             no_tools_messages = [
                 {"role": "system", "content": system_prompt},
@@ -196,8 +216,9 @@ def _triage_one(
                 raise
             except Exception as exc:
                 log.warning("    no-tools fallback error for %s: %s", finding.get("issue_id"), exc)
-                return _error_verdict(finding, repo_name, f"API error: {type(exc).__name__}", str(exc)[:500])
+                return _error_verdict(finding, repo_name, f"API error: {type(exc).__name__}", str(exc)[:500]), messages
             msg = nt_response.choices[0].message
+            _no_tools_msgs = no_tools_messages
 
         if msg.tool_calls:
             # Append assistant turn (with tool_calls) as a plain dict
@@ -225,6 +246,10 @@ def _triage_one(
                 result = _safe_read_file(repo_root, path, start, end)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
         else:
+            # Build the complete message log for this exchange
+            _active_msgs = _no_tools_msgs if _no_tools_msgs is not None else messages
+            _log_msgs = _active_msgs + [{"role": "assistant", "content": msg.content or ""}]
+
             # Model returned a final answer — parse the JSON verdict
             raw_original = (msg.content or "")
             raw = raw_original.strip()
@@ -237,18 +262,18 @@ def _triage_one(
                     line for line in raw.splitlines() if not line.startswith("```")
                 ).strip()
             try:
-                return json.loads(raw)
+                return json.loads(raw), _log_msgs
             except json.JSONDecodeError:
                 # Last resort: extract first {...} block from the response
                 m = _re.search(r"\{.*\}", raw, _re.DOTALL)
                 if m:
                     try:
-                        return json.loads(m.group())
+                        return json.loads(m.group()), _log_msgs
                     except json.JSONDecodeError:
                         pass
                 log.warning("    verdict was not valid JSON for %s", finding.get("issue_id"))
                 log.warning("    raw response (first 1000 chars):\n%s", raw[:1000])
-                return _error_verdict(finding, repo_name, "LLM returned non-JSON output.", raw[:500])
+                return _error_verdict(finding, repo_name, "LLM returned non-JSON output.", raw[:500]), _log_msgs
 
     log.warning(
         "    max_turns (%d) exceeded for %s", max_turns, finding.get("issue_id")
@@ -258,7 +283,7 @@ def _triage_one(
         repo_name,
         f"max_turns ({max_turns}) exceeded without a verdict.",
         "The model kept calling read_file without returning a final verdict.",
-    )
+    ), messages
 
 
 def _error_verdict(finding: dict, repo_name: str, summary: str, reasoning: str) -> dict:
@@ -285,6 +310,7 @@ def run_llm_overlay(
     repo_root: Path,
     repo_name: str,
     overlay_cfg: "LlmOverlayConfig",
+    chat_log: bool = False,
 ) -> Path:
     """Triage all qualifying findings via LiteLLM and write ``triage_report.json``.
 
@@ -329,34 +355,50 @@ def run_llm_overlay(
             "The no-tools fallback will be used (source file pre-embedded in prompt). "
             "Consider switching to a model with tool-calling support for better results."
         )
-    for i, finding in enumerate(findings, 1):
-        issue_id = finding.get("issue_id", f"finding-{i}")
-        print(f"[llm-overlay] {i}/{len(findings)} {issue_id}")
-        try:
-            verdict = _triage_one(
-                finding=finding,
-                repo_name=repo_name,
-                repo_root=repo_root,
-                model=overlay_cfg.model,
-                max_turns=overlay_cfg.max_turns,
-                system_prompt=system_prompt,
-            )
-        except _litellm_exc.AuthenticationError as exc:
-            raise RuntimeError(
-                f"[llm-overlay] Authentication failed — check your API key.\n{exc}"
-            ) from exc
-        except _litellm_exc.RateLimitError as exc:
-            # Distinguish quota exhausted (insufficient_quota) from true rate limit
-            msg = str(exc)
-            if "insufficient_quota" in msg:
+    _chat_log_path = sast_dir / "llm_chat.jsonl"
+    _chat_fh = None
+    if chat_log:
+        _chat_fh = _chat_log_path.open("w", encoding="utf-8")
+    try:
+        for i, finding in enumerate(findings, 1):
+            issue_id = finding.get("issue_id", f"finding-{i}")
+            print(f"[llm-overlay] {i}/{len(findings)} {issue_id}")
+            try:
+                verdict, chat_messages = _triage_one(
+                    finding=finding,
+                    repo_name=repo_name,
+                    repo_root=repo_root,
+                    model=overlay_cfg.model,
+                    max_turns=overlay_cfg.max_turns,
+                    system_prompt=system_prompt,
+                )
+            except _litellm_exc.AuthenticationError as exc:
                 raise RuntimeError(
-                    "[llm-overlay] OpenAI quota exhausted — add credits at "
-                    "https://platform.openai.com/settings/organization/billing"
+                    f"[llm-overlay] Authentication failed — check your API key.\n{exc}"
                 ) from exc
-            raise RuntimeError(
-                f"[llm-overlay] Rate limit hit — slow down or switch model.\n{exc}"
-            ) from exc
-        verdicts.append(verdict)
+            except _litellm_exc.RateLimitError as exc:
+                # Distinguish quota exhausted (insufficient_quota) from true rate limit
+                msg = str(exc)
+                if "insufficient_quota" in msg:
+                    raise RuntimeError(
+                        "[llm-overlay] OpenAI quota exhausted — add credits at "
+                        "https://platform.openai.com/settings/organization/billing"
+                    ) from exc
+                raise RuntimeError(
+                    f"[llm-overlay] Rate limit hit — slow down or switch model.\n{exc}"
+                ) from exc
+            verdicts.append(verdict)
+            if _chat_fh is not None:
+                _chat_fh.write(
+                    json.dumps(
+                        {"issue_id": issue_id, "model": overlay_cfg.model, "messages": chat_messages},
+                        ensure_ascii=False,
+                    ) + "\n"
+                )
+                _chat_fh.flush()
+    finally:
+        if _chat_fh is not None:
+            _chat_fh.close()
 
     report_path = sast_dir / "triage_report.json"
     report_path.write_text(
@@ -364,4 +406,6 @@ def run_llm_overlay(
         encoding="utf-8",
     )
     print(f"[llm-overlay] triage_report.json → {report_path}")
+    if chat_log:
+        print(f"[llm-overlay] llm_chat.jsonl     → {_chat_log_path}")
     return report_path

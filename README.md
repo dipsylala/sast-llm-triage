@@ -28,10 +28,20 @@ Once the scan completes, either:
 
 - **Headless triage** — add `--llm-overlay` and set your API key; the tool
   calls the LLM directly and writes `triage_report.json` without any IDE:
+
   ```bash
   OPENAI_API_KEY=sk-... uv run sast-llm-triage \
     --repo https://github.com/your-org/your-repo --scanner snyk --llm-overlay
   ```
+
+- **Re-triage without re-scanning** — add `--skip-scan` to skip the clone and
+  scan steps and run the overlay against an existing `triage_findings.json`:
+
+  ```bash
+  OPENAI_API_KEY=sk-... uv run sast-llm-triage \
+    --repo output/your-repo --scanner snyk --skip-scan --llm-overlay
+  ```
+
 - **IDE triage** — open `agents/scan-repo.md` in your IDE agent (GitHub
   Copilot, Claude Code, etc.) and supply the `repo_name` and `output_dir`
   values printed at the end of the run.
@@ -49,6 +59,8 @@ sast-llm-triage --repo <url-or-local-path>
             [--config <config.yaml>]      # default: config/config.yaml
             [--qualifying-cwes 22,78,89]  # overrides config default
             [--llm-overlay]               # triage via LiteLLM instead of IDE agent
+            [--skip-scan]                 # skip clone+scan; use existing triage_findings.json
+            [--log]                       # write LLM chat transcripts to llm_chat.jsonl
             [--verbose]
 ```
 
@@ -145,9 +157,8 @@ env var (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) before running.
 and `--llm-overlay` read the same file.  `triage_report.json` format is
 identical regardless of which path produced it.
 
-**Known limitation — no-tools fallback:** Models that do not support the
-OpenAI tool-calling wire format (e.g. many Ollama-hosted models) receive an
-automatic retry without tools, with the source file pre-embedded in the
-prompt instead.  The system prompt still contains the `read_file` tool-policy
-section in that mode; a future improvement will strip those instructions when
-tool calling is unavailable.
+**No-tools fallback:** Models that do not support the OpenAI tool-calling
+wire format (e.g. many Ollama-hosted models) receive an automatic retry
+without tools.  The `source_excerpt` already attached to each finding
+provides the necessary context in that mode — no additional file reads are
+performed.
