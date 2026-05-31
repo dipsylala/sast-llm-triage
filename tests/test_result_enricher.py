@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from factories import make_finding
+
 from triage.stages.result_enricher import _build_excerpt, _safe_resolve, enrich
 
 

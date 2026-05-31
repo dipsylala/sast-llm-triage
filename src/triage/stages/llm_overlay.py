@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
-from typing import TYPE_CHECKING
 
 # Suppress noisy startup warnings about optional AWS/Bedrock/SageMaker modules.
 # Must be set BEFORE importing litellm so the Bedrock pre-load warning is silenced.
 import logging as _logging
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 _logging.getLogger("LiteLLM").setLevel(_logging.ERROR)
 
 try:
@@ -183,7 +184,7 @@ def _triage_one(
             response = litellm.completion(
                 model=model, messages=messages, tools=[_READ_FILE_TOOL]
             )
-        except (_litellm_exc.AuthenticationError, _litellm_exc.RateLimitError) as exc:
+        except (_litellm_exc.AuthenticationError, _litellm_exc.RateLimitError):
             # Quota exhausted or bad key — no point continuing; re-raise so the
             # caller can print a clean error and exit.
             raise
@@ -309,7 +310,7 @@ def run_llm_overlay(
     sast_dir: Path,
     repo_root: Path,
     repo_name: str,
-    overlay_cfg: "LlmOverlayConfig",
+    overlay_cfg: LlmOverlayConfig,
     chat_log: bool = False,
 ) -> Path:
     """Triage all qualifying findings via LiteLLM and write ``triage_report.json``.

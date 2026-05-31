@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 from factories import VERACODE_FINDING_DICT
-from triage.scanners.veracode import _normalize_veracode_trace, _parse_veracode_finding, scan
+
 from triage.config import VeracodeConfig
+from triage.scanners.veracode import _normalize_veracode_trace, _parse_veracode_finding, scan
 
 
 class TestParseVeracodeFinding:
@@ -165,7 +165,7 @@ class TestScanFilteredJson:
         filtered_path = pkg_dir / f"filtered_{fake_pkg.stem}.json"
         filtered_path.write_text(json.dumps(filtered_data), encoding="utf-8")
 
-        with patch("triage.scanners.veracode.run_cmd", return_value=(True, "")) as mock_run:
+        with patch("triage.scanners.veracode.run_cmd", return_value=(True, "")):
             # run_cmd is mocked so the real veracode CLI is never called;
             # filtered JSON was pre-created above to simulate CLI output.
             result = scan(repo, sast_dir, cfg)

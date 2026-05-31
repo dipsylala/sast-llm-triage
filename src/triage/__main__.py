@@ -17,6 +17,7 @@ from triage.stages.normalizer import normalize
 from triage.stages.repo_cloner import _is_url, clone
 from triage.stages.result_enricher import enrich
 
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sast-llm-triage",

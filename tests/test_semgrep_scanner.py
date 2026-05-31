@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
-import json
 
 import pytest
-
 from factories import SEMGREP_RESULT_DICT
-from triage.scanners.semgrep import _extract_cwe, _normalize_semgrep_trace, _parse_semgrep_result, scan
+
 from triage.config import SemgrepConfig
+from triage.scanners.semgrep import (
+    _extract_cwe,
+    _normalize_semgrep_trace,
+    _parse_semgrep_result,
+    scan,
+)
 
 
 class TestExtractCwe:

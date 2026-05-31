@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from factories import SNYK_RESULT_DICT, SNYK_RULE_DICT, SNYK_SARIF_DOC
+
 from triage.config import SnykConfig
 from triage.scanners.snyk import (
     _build_rule_index,

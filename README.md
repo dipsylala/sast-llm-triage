@@ -106,6 +106,44 @@ uv run python -m pytest
 
 ---
 
+## Developer notes
+
+### Running tests
+
+```bash
+uv sync --extra semgrep   # adds semgrep scanner to dev env
+uv run pytest             # all tests
+uv run pytest -k snyk     # filter by keyword
+uv run pytest --cov       # with coverage report
+```
+
+### Linting
+
+```bash
+# Python — ruff (import order, unused imports, style)
+uv run ruff check src tests
+
+# Auto-fix everything ruff can fix
+uv run ruff check --fix src tests
+
+# Markdown — pymarkdownlnt
+uv run pymarkdown scan README.md CLAUDE.md SPEC.md agents
+```
+
+Both linters are in the `dev` dependency group and installed by `uv sync`.
+Ruff is configured in `[tool.ruff]` in `pyproject.toml`; pymarkdown rules in
+`[tool.pymarkdown]`.
+
+### Type checking
+
+```bash
+uv run mypy src
+```
+
+mypy is configured with `strict = true` in `[tool.mypy]`.
+
+---
+
 ## LLM Overlay (`--llm-overlay`)
 
 Adding `--llm-overlay` replaces the manual IDE agent step with direct LLM API

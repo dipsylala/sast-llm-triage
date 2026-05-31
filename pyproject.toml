@@ -47,7 +47,8 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "ANN"]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]  # line length — not enforced (mypy strict covers types)
 
 [dependency-groups]
 dev = [
@@ -55,4 +56,14 @@ dev = [
     "pytest-cov>=7.1.0",
     "mypy>=1.7",
     "ruff>=0.1",
+    "pymarkdownlnt>=0.9",
 ]
+
+[tool.pymarkdown.extensions]
+front-matter.enabled = true
+
+[tool.pymarkdown.plugins]
+line-length.enabled = false          # MD013 — long lines are fine in docs
+no-inline-html.enabled = false       # MD033 — inline HTML allowed
+no-duplicate-header.enabled = false  # MD024 — duplicate headings OK in changelogs
+no-emphasis-as-heading.enabled = false  # MD036 — bold text not required to be headings

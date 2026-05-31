@@ -52,7 +52,7 @@ OPENAI_API_KEY=sk-... uv run sast-llm-triage \
 ### All CLI flags
 
 | Flag | Default | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `--repo` | required | URL or local path (relative paths resolved from cwd) |
 | `--scanner` | required | `veracode`, `semgrep`, or `snyk` |
 | `--output-dir` | `./output` | Root directory for all outputs |
@@ -67,7 +67,7 @@ OPENAI_API_KEY=sk-... uv run sast-llm-triage \
 
 ## Output Layout
 
-```
+```text
 output/
   <repo-name>/
     <repo-name>/         ← cloned source (or symlink for local paths)
@@ -97,6 +97,7 @@ No network calls in unit tests — scanners are mocked.
 ## Configuration
 
 `config/config.yaml` controls:
+
 - `qualifying_cwes` — list of CWE IDs to keep after scanning (currently 40 entries)
 - `context_lines` — source lines of context per finding (default: 25)
 - `llm_overlay.model` — LiteLLM model string (e.g. `openai/gpt-4o`, `anthropic/claude-opus-4-5`, `ollama/llama3`)
@@ -106,7 +107,7 @@ No network calls in unit tests — scanners are mocked.
 
 ## Project Structure
 
-```
+```text
 src/triage/
   __main__.py          ← CLI entry point, orchestrates all stages
   config.py            ← loads config.yaml, resolves paths
@@ -150,7 +151,7 @@ output/                ← gitignored scan outputs
 ## External Tool Requirements
 
 | Scanner | Requirement |
-|---|---|
+| --- | --- |
 | Veracode | `veracode` CLI in PATH; `~/.veracode/credentials` file (API ID + key) |
 | Semgrep | `uv sync --extra semgrep`; optional `SEMGREP_APP_TOKEN` for Pro Engine |
 | Snyk | `snyk` CLI in PATH; run `snyk auth` once |

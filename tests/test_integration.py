@@ -12,13 +12,14 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+from factories import make_finding
+
 from triage.config import SemgrepConfig, SnykConfig, VeracodeConfig
 from triage.scanners import semgrep as semgrep_scanner
 from triage.scanners import snyk as snyk_scanner
 from triage.scanners import veracode as veracode_scanner
-from factories import make_finding
-from triage.stages.result_enricher import enrich
 from triage.stages.normalizer import normalize
+from triage.stages.result_enricher import enrich
 
 _QUALIFYING_CWES: frozenset[str] = frozenset({"89", "78"})
 

@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from factories import make_finding, make_scan_result
+
 from triage.stages.normalizer import normalize
 
 

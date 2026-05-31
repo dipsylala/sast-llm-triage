@@ -418,4 +418,3 @@ Verdicts are collected into a list and written to
 IDE agent.  Findings that exhaust `max_turns` or return non-JSON content are
 written as `needs_review` / `confidence: low` entries rather than causing an
 error.
-
