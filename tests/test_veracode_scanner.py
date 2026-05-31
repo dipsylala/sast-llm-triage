@@ -62,14 +62,14 @@ class TestNormalizeVeracodeTrace:
         r = _normalize_veracode_trace(raw)
         # frame[-1] is the source
         assert r[0]["source"]["file"] == "src/Step1.java"
-        assert r[0]["source"]["snippet"] == "var1"
+        assert r[0]["source"]["snippet"] == ""  # enricher fills from source
 
     def test_sink_is_first_frame(self):
         raw = self._make_raw(n_frames=3)
         r = _normalize_veracode_trace(raw)
         # frame[0] is the sink
         assert r[0]["sink"]["file"] == "src/Step3.java"
-        assert r[0]["sink"]["snippet"] == "var3"
+        assert r[0]["sink"]["snippet"] == ""  # enricher fills from source
 
     def test_middle_frames_become_steps(self):
         raw = self._make_raw(n_frames=4)
@@ -101,9 +101,9 @@ class TestNormalizeVeracodeTrace:
             {"SourceFile": "B.java", "SourceLine": 5, "VarNames": [], "FunctionName": "getInput"},
         ]}]}
         r = _normalize_veracode_trace(raw)
-        # frame[-1] = source = B.java (getInput)
-        assert r[0]["source"]["snippet"] == "getInput"
-        assert r[0]["sink"]["snippet"] == "doQuery"
+        # snippets are always empty; result_enricher fills from source
+        assert r[0]["source"]["snippet"] == ""
+        assert r[0]["sink"]["snippet"] == ""
 
     def test_multiple_stack_dumps_return_multiple_paths(self):
         raw = {

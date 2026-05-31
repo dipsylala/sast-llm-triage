@@ -17,7 +17,24 @@ from triage.models import Finding
 logger = logging.getLogger(__name__)
 
 
-def _safe_resolve(local_path: Path, file_rel: str) -> Path | None:
+def _closest_match(matches: list[Path], hint: Path) -> Path | None:
+    """Return the match sharing the most path components with *hint*.
+
+    Only returns a winner when it scores strictly higher than every other
+    candidate — ties are still treated as ambiguous.
+    """
+    hint_parts = set(hint.parts)
+
+    def score(m: Path) -> int:
+        return len(set(m.parts) & hint_parts)
+
+    ranked = sorted(matches, key=score, reverse=True)
+    if score(ranked[0]) > score(ranked[1]):
+        return ranked[0]
+    return None  # still ambiguous
+
+
+def _safe_resolve(local_path: Path, file_rel: str, hint: Path | None = None) -> Path | None:
     """Resolve *file_rel* relative to *local_path*, preventing path traversal.
 
     Returns ``None`` if the resolved path escapes *local_path* or does not
@@ -52,17 +69,29 @@ def _safe_resolve(local_path: Path, file_rel: str) -> Path | None:
         # where Veracode reports Java package paths like
         # "com/example/Foo.java" but the file lives under
         # "app/src/main/java/com/example/Foo.java").
+        #
+        # If the full suffix also fails, progressively strip one leading
+        # component at a time — handles bogus package-name prefixes that
+        # Veracode sometimes prepends (e.g. "pkg-name/src/Foo.java").
         root = local_path.resolve()
-        try:
-            matches = [
-                m for m in root.rglob(normalised)
-                if m.is_file() and _within(m, root)
-            ]
-        except OSError:
-            matches = []
-        if len(matches) == 1:
-            return matches[0]
-        # Multiple matches — ambiguous; fall back to None
+        parts = Path(normalised).parts  # ("bogus-prefix", "app", "db.py") etc.
+        for start in range(len(parts)):
+            suffix = str(Path(*parts[start:]))
+            try:
+                matches = [
+                    m for m in root.rglob(suffix)
+                    if m.is_file() and _within(m, root)
+                ]
+            except OSError:
+                matches = []
+            if len(matches) == 1:
+                return matches[0]
+            if len(matches) > 1:
+                if hint is not None:
+                    best = _closest_match(matches, hint)
+                    if best is not None:
+                        return best
+                return None  # ambiguous — don't guess
         return None
 
     return resolved
@@ -152,6 +181,10 @@ def _enrich_stack_dumps(finding: Finding, local_path: Path) -> None:
     if not finding.stack_dumps:
         return
 
+    # Use the finding's own resolved file as a hint when a stack-dump node's
+    # file path is ambiguous (e.g. "src/index.ts" in a monorepo).
+    finding_hint = _safe_resolve(local_path, finding.file)
+
     file_cache: dict[str, list[str]] = {}
 
     for path in finding.stack_dumps:
@@ -172,7 +205,7 @@ def _enrich_stack_dumps(finding: Finding, local_path: Path) -> None:
                 continue
 
             if file_rel not in file_cache:
-                resolved = _safe_resolve(local_path, file_rel)
+                resolved = _safe_resolve(local_path, file_rel, hint=finding_hint)
                 if resolved is None:
                     file_cache[file_rel] = []  # unresolvable — skip all nodes from this file
                     continue

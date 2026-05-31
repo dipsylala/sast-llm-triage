@@ -72,11 +72,20 @@ output/
   <repo-name>/
     <repo-name>/         ← cloned source (or symlink for local paths)
     .sast-results/
-      triage_findings.json   ← qualifying findings (filtered, sorted)
-      raw_findings.json      ← all findings before CWE filter
-      triage_report.json     ← LLM verdicts (--llm-overlay only)
-      .veracode/             ← Veracode packages + raw JSON
-      .snyk/                 ← raw Snyk SARIF output
+      veracode/
+        .veracode/           ← Veracode packages + raw JSON
+        triage_findings.json
+        raw_findings.json
+        triage_report.json   ← LLM verdicts (--llm-overlay only)
+      semgrep/
+        triage_findings.json
+        raw_findings.json
+        triage_report.json
+      snyk/
+        .snyk/               ← raw Snyk SARIF output
+        triage_findings.json
+        raw_findings.json
+        triage_report.json
 ```
 
 ---

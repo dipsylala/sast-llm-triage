@@ -5,7 +5,7 @@
 For every finding with a relevant CWE ID in **one** scanned repository, assess
 whether the flaw is genuinely exploitable, a theoretical risk requiring
 unusually difficult conditions, or a false positive.  Write the results to
-`<output_dir>/<repo_name>/.sast-results/triage_report.json`.
+`<output_dir>/<repo_name>/.sast-results/<scanner>/triage_report.json`.
 
 This agent acts as an **orchestrator**: it reads `triage_findings.json`, spawns
 one `triage-finding` worker subagent per finding, collects the returned verdict
@@ -16,7 +16,7 @@ objects, and writes the final report.
 ## FIRST STEP — MANDATORY
 
 **Before doing anything else**, check whether
-`<output_dir>/<repo_name>/.sast-results/triage_findings.json` exists.
+`<output_dir>/<repo_name>/.sast-results/<scanner>/triage_findings.json` exists.
 
 - **If it exists**: Use this file as your sole findings input.  It already
   contains the filtered, sorted findings with source excerpts attached.
@@ -27,7 +27,7 @@ objects, and writes the final report.
   `triage_findings.json exists but is not valid JSON — cannot proceed.`
 
 After confirming the JSON is valid, also read
-`<output_dir>/<repo_name>/.sast-results/findings_summary.md` if it exists.
+`<output_dir>/<repo_name>/.sast-results/<scanner>/findings_summary.md` if it exists.
 It contains a compact Markdown table (issue_id, severity, CWE, file:line,
 stack_dumps presence) plus per-severity and per-CWE counts.  Use it to
 orient yourself.  Its absence does not block triage.
@@ -46,7 +46,9 @@ orient yourself.  Its absence does not block triage.
   context, e.g. `FUEL-CMS`).
 - **`output_dir`** — absolute path to the output root (provided in the task
   context; default: the `output/` folder inside the `repo-triage` project).
-- **Input file** — `<output_dir>/<repo_name>/.sast-results/triage_findings.json`
+- **`scanner`** — the scanner used: `veracode`, `semgrep`, or `snyk` (provided
+  in the task context).
+- **Input file** — `<output_dir>/<repo_name>/.sast-results/<scanner>/triage_findings.json`
 - **Source code** — the cloned repo lives at `<output_dir>/<repo_name>/` (when
   cloned from a URL) or at the path provided to `--repo` (when scanned from a
   local path).  For local-path scans the agent context should include the
@@ -80,7 +82,7 @@ Read `triage_findings.json`.  The file contains:
 - `total_pre_dedup` — total qualifying findings before sink deduplication.
 - `total_qualifying` — unique sinks after deduplication (number of workers to spawn).
 
-If `findings` is an empty array, write `[]` to `.sast-results/triage_report.json` and
+If `findings` is an empty array, write `[]` to `.sast-results/<scanner>/triage_report.json` and
 respond with:
 `[<repo_name>] done — 0 finding(s) assessed, written to <path>`.
 

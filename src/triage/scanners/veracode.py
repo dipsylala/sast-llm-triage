@@ -41,12 +41,10 @@ def _normalize_veracode_trace(raw_stack_dumps: dict | None) -> list[dict] | None
         return None
 
     def _frame_step(f: dict) -> dict:
-        var_names: list = f.get("VarNames") or []
-        snippet = var_names[0] if var_names else str(f.get("FunctionName", ""))
         return {
             "file": str(f.get("SourceFile", "")),
             "line": int(f.get("SourceLine", 0)),
-            "snippet": snippet,
+            "snippet": "",  # left empty; result_enricher fills from source
         }
 
     paths: list[dict] = []

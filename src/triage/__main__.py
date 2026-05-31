@@ -95,6 +95,7 @@ def _print_triage_instructions(
     combined_path: Path,
     qualifying_count: int,
     total_raw: int | None,
+    scanner: str,
 ) -> None:
     line = "-" * 60
     print(f"\n{line}")
@@ -115,6 +116,7 @@ def _print_triage_instructions(
     )
     print(f"  repo_name  = {repo_name}")
     print(f"  output_dir = {output_dir.resolve()}")
+    print(f"  scanner    = {scanner}")
     print(line)
 
 
@@ -150,7 +152,7 @@ def main() -> None:
     # URL is available when the input looked like a remote URL; otherwise None.
     repo_url: str | None = args.repo if _is_url(args.repo) else None
 
-    sast_dir = cfg.output_dir / repo_name / ".sast-results"
+    sast_dir = cfg.output_dir / repo_name / ".sast-results" / args.scanner
     sast_dir.mkdir(parents=True, exist_ok=True)
 
     total_raw: int | None = None
@@ -225,6 +227,7 @@ def main() -> None:
             combined_path=combined_path,
             qualifying_count=qualifying_count,
             total_raw=total_raw,
+            scanner=args.scanner,
         )
 
 

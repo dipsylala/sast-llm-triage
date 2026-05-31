@@ -73,12 +73,20 @@ nothing is cloned.
 output/
   <repo_name>/
     .sast-results/
-      .veracode/             ← Veracode packages + raw scan JSON (veracode only)
-      .semgrep/              ← raw Semgrep JSON output (semgrep only)
-      .snyk/                 ← raw Snyk SARIF JSON output (snyk only)
-      raw_findings.json      ← all findings before CWE filtering
-      triage_findings.json   ← filtered, scored, enriched — LLM agent input
-      triage_report.json     ← written by the LLM agent after triage
+      veracode/
+        .veracode/             ← packages + raw scan JSON
+        raw_findings.json
+        triage_findings.json
+        triage_report.json
+      semgrep/
+        raw_findings.json
+        triage_findings.json
+        triage_report.json
+      snyk/
+        .snyk/                 ← raw SARIF output
+        raw_findings.json
+        triage_findings.json
+        triage_report.json
 ```
 
 ### Scan engines
