@@ -64,7 +64,7 @@ Outside surface: config files, env vars, operator-managed DB rows, trusted inter
 If the source file is unreadable (missing, binary, minified) → `needs_review` immediately.
 
 | Verdict | Meaning |
-|---------|---------|
+| ------- | ------- |
 | `exploitable` | Attacker input reaches sink with no effective sanitization. |
 | `likely_exploitable` | Path reachable and unsanitized but uncertainty remains (auth required, partial context). |
 | `needs_review` | Cannot determine statically — opaque flow or unreadable dependency. |

@@ -4,47 +4,47 @@ output:
 scan:
   context_lines: 25      # source lines of context either side of the finding line
   qualifying_cwes:
-    - "22"
-    - "73"
-    - "77"
-    - "78"
-    - "79"
-    - "80"
-    - "88"
-    - "89"
-    - "94"
-    - "95"
-    - "98"
-    - "120"
-    - "121"
-    - "125"
-    - "129"
-    - "134"
-    - "135"
-    - "170"
-    - "190"
-    - "191"
-    - "193"
-    - "242"
-    - "295"
-    - "319"
-    - "327"
-    - "352"
-    - "367"
-    - "415"
-    - "416"
-    - "434"
-    - "476"
-    - "502"
-    - "532"
-    - "601"
-    - "611"
-    - "787"
-    - "798"
-    - "823"
-    - "824"
-    - "862"
-    - "918"
+    - "22"   # Path Traversal
+    - "73"   # External Control of File Name or Path
+    - "77"   # Command Injection (generic)
+    - "78"   # OS Command Injection
+    - "79"   # Cross-Site Scripting (XSS)
+    - "80"   # Basic XSS (stored)
+    - "88"   # Argument Injection
+    - "89"   # SQL Injection
+    - "94"   # Code Injection
+    - "95"   # Eval Injection
+    - "98"   # PHP Remote File Inclusion
+    - "120"  # Buffer Copy Without Size Check
+    - "121"  # Stack-Based Buffer Overflow
+    - "125"  # Out-of-Bounds Read
+    - "129"  # Improper Validation of Array Index
+    - "134"  # Uncontrolled Format String
+    - "135"  # Incorrect Calculation of Multi-Byte String Length
+    - "170"  # Improper Null Termination
+    - "190"  # Integer Overflow
+    - "191"  # Integer Underflow
+    - "193"  # Off-by-One Error
+    - "242"  # Use of Inherently Dangerous Function
+    - "295"  # Improper Certificate Validation
+    - "319"  # Cleartext Transmission of Sensitive Data
+    - "327"  # Use of Broken/Risky Cryptographic Algorithm
+    - "352"  # Cross-Site Request Forgery (CSRF)
+    - "367"  # TOCTOU Race Condition
+    - "415"  # Double Free
+    - "416"  # Use After Free
+    - "434"  # Unrestricted File Upload
+    - "476"  # NULL Pointer Dereference
+    - "502"  # Deserialization of Untrusted Data
+    - "532"  # Sensitive Info in Log Files
+    - "601"  # Open Redirect
+    - "611"  # XML External Entity (XXE)
+    - "787"  # Out-of-Bounds Write
+    - "798"  # Hard-coded Credentials
+    - "823"  # Use of Out-of-Range Pointer Offset
+    - "824"  # Access of Uninitialized Pointer
+    - "862"  # Missing Authorization
+    - "918"  # Server-Side Request Forgery (SSRF)
 
 semgrep:
   config: "auto"    # always pulls latest rules; semgrep caches locally
