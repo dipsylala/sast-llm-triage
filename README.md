@@ -93,9 +93,24 @@ output/
 
 | Engine | How it runs | Credentials |
 | -------- | ------------- | ------------- |
-| Semgrep | Entirely local — source code never leaves the machine | None required for OSS; run `semgrep login` before enabling `semgrep.pro: true` in config |
+| Semgrep | Entirely local — source code never leaves the machine | None required for OSS rules; see below for Pro Engine setup |
 | Snyk Code | Source tree sent to Snyk cloud analysis API | Install Snyk CLI ([docs](https://docs.snyk.io/developer-tools/snyk-cli/install-the-snyk-cli)), then run `snyk auth` once |
 | Veracode | Packages locally; analysis runs in Veracode Pipeline Scan cloud API | Veracode API keys required |
+
+**Semgrep setup:**
+
+```bash
+# Install the semgrep extra
+uv sync --extra semgrep
+
+# OSS rules only — no login needed
+uv run sast-llm-triage --repo <url> --scanner semgrep
+
+# Pro Engine — login, install the binary, then enable in config
+semgrep login
+semgrep install-semgrep-pro
+# set semgrep.pro: true in config/config.yaml
+```
 
 ### Configuration
 
@@ -106,9 +121,6 @@ for credentials are loaded from a `.env` file if present (never committed).
 ### Running tests
 
 ```bash
-# Install dev dependencies plus the semgrep optional extra (needed for semgrep scanner tests)
-uv sync --extra semgrep
-
 uv run python -m pytest
 ```
 
@@ -119,7 +131,7 @@ uv run python -m pytest
 ### Running tests
 
 ```bash
-uv sync --extra semgrep   # adds semgrep scanner to dev env
+uv sync --extra semgrep   # needed for semgrep scanner tests
 uv run pytest             # all tests
 uv run pytest -k snyk     # filter by keyword
 uv run pytest --cov       # with coverage report
@@ -160,8 +172,8 @@ library that wraps OpenAI, Anthropic, and many other providers behind one
 uniform interface.
 
 ```bash
-# Install the extra dependency
-pip install litellm
+# Install the llm-overlay extra (adds litellm)
+uv sync --extra llm-overlay
 
 # Full pipeline — scan + triage in one command
 OPENAI_API_KEY=sk-... uv run sast-llm-triage \
